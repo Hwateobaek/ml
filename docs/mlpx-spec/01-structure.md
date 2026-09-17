@@ -518,7 +518,7 @@ IndexedDB에 저장된다(docs/i18n.md). 남의 파일을 열었다고 화면 �
       },
 
       "preprocessor": {                          // 학습된 전처리 파라미터
-        "format": "mlpx-preprocess-v1",
+        "format": "mlpx-preprocess-v2",
         "path": "model/preprocessor-experiment-2.json"
       },
 
