@@ -22,6 +22,8 @@ import {
   Chart,
   Legend,
   LinearScale,
+  LineController,
+  LineElement,
   PointElement,
   ScatterController,
   Tooltip,
@@ -29,7 +31,7 @@ import {
   type TooltipItem,
 } from 'chart.js'
 import { computed, onMounted, ref, watch } from 'vue'
-import { Bar, Scatter } from 'vue-chartjs'
+import { Bar, Line, Scatter } from 'vue-chartjs'
 import { useI18n } from 'vue-i18n'
 
 import AppBadge from '@/components/AppBadge.vue'
@@ -44,8 +46,10 @@ import {
   boxPlot,
   categoryCounts,
   crossTab,
+  defaultLineAxis,
   groupedBoxPlots,
   histogram,
+  lineChart,
   numericPairs,
   numericValues,
 } from '@/data/visualize'
@@ -59,6 +63,8 @@ Chart.register(
   BarElement,
   CategoryScale,
   LinearScale,
+  LineController,
+  LineElement,
   PointElement,
   ScatterController,
   Tooltip,
@@ -121,6 +127,44 @@ const boxGroupColumn = ref('')
 /** 교차표의 행과 열. */
 const crossRowColumn = ref('')
 const crossColumnColumn = ref('')
+/** 선그래프의 가로축 열과 선으로 그릴 열들. */
+const lineXColumn = ref('')
+const lineYColumns = ref<string[]>([])
+
+/** 선그래프의 가로축이 될 수 있는 열. **모든 열이다** — 연도는 숫자로도, 글자로도 적힌다. */
+const allColumns = computed(() => summaries.value.map((column) => column.name))
+
+/** 선으로 그릴 수 있는 열. 가로축으로 쓰는 열은 뺀다 — 자기 자신과의 선은 대각선뿐이다. */
+const lineYOptions = computed(() =>
+  numericColumns.value.filter((name) => name !== lineXColumn.value),
+)
+
+watch(
+  allColumns,
+  (columns) => {
+    if (!columns.includes(lineXColumn.value)) {
+      lineXColumn.value = defaultLineAxis(columns)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  lineYOptions,
+  (options) => {
+    const kept = lineYColumns.value.filter((name) => options.includes(name))
+    lineYColumns.value = kept.length > 0 ? kept : options.slice(0, 1)
+  },
+  { immediate: true },
+)
+
+function toggleLineColumn(name: string, checked: boolean): void {
+  // 열 차례를 표의 차례로 유지한다 — 누른 차례로 쌓으면 선의 색이 누를 때마다 바뀐다.
+  const next = new Set(lineYColumns.value)
+  if (checked) next.add(name)
+  else next.delete(name)
+  lineYColumns.value = lineYOptions.value.filter((option) => next.has(option))
+}
 
 /**
  * 열이 바뀌면 고른 값을 다시 맞춘다.
@@ -422,6 +466,71 @@ const countOptions = computed(() => ({
       grid: { color: line.value },
       ticks: { color: ink.value, precision: 0 },
     },
+  },
+}))
+
+/* ── 선그래프 ── */
+
+const lines = computed(() =>
+  dataset.value && lineXColumn.value
+    ? lineChart(dataset.value, lineXColumn.value, lineYColumns.value)
+    : { labels: [], series: [], averaged: false },
+)
+
+/**
+ * 선마다 색과 점 모양이 **둘 다** 다르다. 교과서 그림처럼 흑백으로 인쇄해도 선이 갈려야
+ * 하고, 색을 못 가리는 학생에게도 그렇다.
+ */
+const LINE_POINTS: readonly PointStyle[] = [
+  'circle',
+  'rect',
+  'triangle',
+  'star',
+  'rectRot',
+  'crossRot',
+]
+
+const lineData = computed(() => ({
+  labels: [...lines.value.labels],
+  datasets: lines.value.series.map((series, index) => ({
+    label: label(series.column),
+    data: [...series.values],
+    borderColor: groupColor(index),
+    backgroundColor: groupColor(index),
+    pointStyle: LINE_POINTS[index % LINE_POINTS.length] ?? 'circle',
+    pointRadius: 3,
+    pointHoverRadius: 6,
+    borderWidth: 2.5,
+    tension: 0,
+    // 빈 자리는 이어 긋지 않는다 — 없던 값을 선이 지어낸 것처럼 보인다.
+    spanGaps: false,
+  })),
+}))
+
+const lineOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false as const,
+  interaction: { mode: 'index' as const, intersect: false },
+  plugins: {
+    legend: { display: true, labels: { color: ink.value, usePointStyle: true } },
+    tooltip: {
+      callbacks: {
+        label: (item: TooltipItem<'line'>) =>
+          t('visualize.lineValue', {
+            name: item.dataset.label ?? '',
+            value: format.stat(item.parsed.y ?? 0),
+          }),
+      },
+    },
+  },
+  scales: {
+    x: {
+      title: { display: true, text: label(lineXColumn.value), color: ink.value },
+      grid: { color: line.value },
+      ticks: { color: ink.value },
+    },
+    y: { grid: { color: line.value }, ticks: { color: ink.value } },
   },
 }))
 
@@ -915,6 +1024,55 @@ function crossStyle(count: number): Record<string, string> {
             <div class="h-96 min-w-0">
               <Scatter :data="scatterData" :options="scatterOptions" />
             </div>
+          </div>
+        </AppCard>
+
+        <!-- 선그래프 -->
+        <AppCard
+          class="min-w-0"
+          :title="t('visualize.line')"
+          :description="t('visualize.lineLead')"
+        >
+          <div class="flex flex-col gap-4">
+            <label class="flex flex-wrap items-center gap-2">
+              <span class="font-bold text-ink-soft">{{ t('visualize.axisX') }}</span>
+              <select
+                v-model="lineXColumn"
+                class="rounded-field border border-line-strong bg-surface px-2 py-1"
+              >
+                <option v-for="name in allColumns" :key="name" :value="name">
+                  {{ label(name) }}
+                </option>
+              </select>
+            </label>
+
+            <fieldset class="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <legend class="mb-2 font-bold text-ink-soft">{{ t('visualize.lineColumns') }}</legend>
+              <label
+                v-for="name in lineYOptions"
+                :key="name"
+                class="flex cursor-pointer items-center gap-2"
+              >
+                <input
+                  type="checkbox"
+                  class="size-4 accent-brand"
+                  :checked="lineYColumns.includes(name)"
+                  @change="toggleLineColumn(name, ($event.target as HTMLInputElement).checked)"
+                />
+                <span>{{ label(name) }}</span>
+              </label>
+            </fieldset>
+
+            <p v-if="lineYColumns.length === 0" class="text-ink-soft">
+              {{ t('visualize.lineNeedsColumn') }}
+            </p>
+            <div v-else class="h-96 min-w-0">
+              <Line :data="lineData" :options="lineOptions" />
+            </div>
+
+            <p v-if="lines.averaged && lineYColumns.length > 0" class="text-ink-faint">
+              {{ t('visualize.lineAveraged', { column: label(lineXColumn) }) }}
+            </p>
           </div>
         </AppCard>
 

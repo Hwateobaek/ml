@@ -416,3 +416,93 @@ export function crossTab(dataset: Dataset, rowColumn: string, columnColumn: stri
     counts: rows.map((left) => columns.map((right) => pairs.get(left)?.get(right) ?? 0)),
   }
 }
+
+/* ── 선그래프 ── */
+
+/** 선 하나. `values[i]`가 `labels[i]` 자리의 값이고, 값이 없으면 `null`이라 선이 끊긴다. */
+export interface LineSeries {
+  readonly column: string
+  readonly values: readonly (number | null)[]
+}
+
+export interface LineChart {
+  readonly labels: readonly string[]
+  readonly series: readonly LineSeries[]
+  /** 같은 가로축 값을 가진 행이 둘 이상이라 평균을 냈는가. 화면이 그 사실을 말한다. */
+  readonly averaged: boolean
+}
+
+/**
+ * 가로축 열의 값마다 세로축 열들의 값을 늘어놓는다 — 연도별 물가 같은 선그래프다.
+ *
+ * **가로축 값이 같은 행이 여럿이면 평균을 낸다.** 한 해에 여러 번 잰 표에서 점을 다 찍으면
+ * 선이 한 자리에서 위아래로 긁히고, 추세가 안 보인다. 평균을 냈는지는 `averaged`가 말한다.
+ *
+ * **가로축은 차례가 있는 값으로 놓는다.** 값이 전부 숫자면 수의 크기로, 아니면 숫자가 섞인
+ * 이름 차례로 놓는다(`2002`, `2010` / `1월`, `10월`). 파일에 적힌 차례를 따르지 않는 것은
+ * 최신 연도가 위에 오는 표가 흔하기 때문이다 — 그대로 그리면 선이 거꾸로 간다.
+ *
+ * 가로축이 빈 칸인 행은 빠진다. 세로값이 비었거나 숫자가 아니면 그 칸만 빠진다.
+ */
+export function lineChart(
+  dataset: Dataset,
+  xColumn: string,
+  yColumns: readonly string[],
+): LineChart {
+  const xIndex = dataset.columns.indexOf(xColumn)
+  const yIndexes = yColumns.map((column) => dataset.columns.indexOf(column))
+  if (xIndex < 0) return { labels: [], series: [], averaged: false }
+
+  const groups = new Map<string, { count: number; sums: number[]; counts: number[] }>()
+  for (const row of dataset.rows) {
+    const x = categoryOf(row, xIndex)
+    if (x === null) continue
+    let group = groups.get(x)
+    if (group === undefined) {
+      group = { count: 0, sums: yIndexes.map(() => 0), counts: yIndexes.map(() => 0) }
+      groups.set(x, group)
+    }
+    group.count += 1
+    yIndexes.forEach((index, position) => {
+      if (index < 0) return
+      const cell = (row[index] ?? '').trim()
+      const value = Number(cell)
+      if (cell === '' || !Number.isFinite(value)) return
+      group.sums[position] = (group.sums[position] ?? 0) + value
+      group.counts[position] = (group.counts[position] ?? 0) + 1
+    })
+  }
+
+  const keys = [...groups.keys()]
+  const allNumeric = keys.every((key) => Number.isFinite(Number(key)))
+  const labels = allNumeric
+    ? keys.sort((left, right) => Number(left) - Number(right))
+    : sortCategories(keys)
+
+  let averaged = false
+  for (const group of groups.values()) if (group.count > 1) averaged = true
+
+  return {
+    labels,
+    series: yColumns.map((column, position) => ({
+      column,
+      values: labels.map((label) => {
+        const group = groups.get(label)
+        const count = group?.counts[position] ?? 0
+        return count === 0 ? null : (group?.sums[position] ?? 0) / count
+      }),
+    })),
+    averaged,
+  }
+}
+
+/** 이름이 시간을 가리키는 열. 학생의 표는 한글 머리글이 흔해서 두 언어를 함께 본다. */
+const TIME_NAME = /year|date|month|day|time|연도|년|날짜|월|일자|시간|시기/i
+
+/**
+ * 선그래프 가로축의 첫 값. **이름이 시간을 가리키는 열을 먼저 잡는다** — 선그래프는 거의
+ * 늘 시간의 흐름을 그리고, 표의 첫 열은 흔히 번호나 이름이다. 그런 열이 없으면 첫 열이다.
+ */
+export function defaultLineAxis(columns: readonly string[]): string {
+  return columns.find((name) => TIME_NAME.test(name)) ?? columns[0] ?? ''
+}

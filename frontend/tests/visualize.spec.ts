@@ -12,12 +12,14 @@ import {
   boxPlot,
   categoryCounts,
   crossTab,
+  defaultLineAxis,
   groupedBoxPlots,
   correlation,
   correlationMatrix,
   descriptiveStats,
   fiveNumbers,
   histogram,
+  lineChart,
   numericPairs,
   numericValues,
   outlierCounts,
@@ -267,5 +269,66 @@ describe('범주 그림', () => {
     expect(categoryCounts(table, 'nope')).toEqual([])
     expect(groupedBoxPlots(table, 'mass', 'nope')).toEqual([])
     expect(crossTab(table, 'nope', 'species').rows).toEqual([])
+  })
+})
+
+describe('lineChart', () => {
+  it('가로축 값의 크기 차례로 놓는다 — 파일의 차례가 아니다', () => {
+    const table: Dataset = {
+      columns: ['year', 'price'],
+      rows: [
+        ['2010', '3'],
+        ['2002', '1'],
+        ['2006', '2'],
+      ],
+    }
+    expect(lineChart(table, 'year', ['price'])).toEqual({
+      labels: ['2002', '2006', '2010'],
+      series: [{ column: 'price', values: [1, 2, 3] }],
+      averaged: false,
+    })
+  })
+
+  it('같은 가로축 값은 평균을 내고 그 사실을 알린다', () => {
+    const table: Dataset = {
+      columns: ['year', 'a', 'b'],
+      rows: [
+        ['2020', '1', '10'],
+        ['2020', '3', ''],
+        ['2021', '5', 'x'],
+        ['', '100', '100'],
+      ],
+    }
+    const chart = lineChart(table, 'year', ['a', 'b'])
+    expect(chart.labels).toEqual(['2020', '2021'])
+    expect(chart.series).toEqual([
+      { column: 'a', values: [2, 5] },
+      { column: 'b', values: [10, null] },
+    ])
+    expect(chart.averaged).toBe(true)
+  })
+
+  it('숫자가 아닌 가로축은 숫자가 섞인 이름 차례다', () => {
+    const table: Dataset = {
+      columns: ['month', 'v'],
+      rows: [
+        ['10월', '3'],
+        ['2월', '2'],
+        ['1월', '1'],
+      ],
+    }
+    expect(lineChart(table, 'month', ['v']).labels).toEqual(['1월', '2월', '10월'])
+  })
+})
+
+describe('defaultLineAxis', () => {
+  it('시간을 가리키는 이름의 열을 먼저 잡는다', () => {
+    expect(defaultLineAxis(['품목', '가격', '연도'])).toBe('연도')
+    expect(defaultLineAxis(['id', 'Year', 'price'])).toBe('Year')
+  })
+
+  it('그런 열이 없으면 첫 열이고, 열이 없으면 빈 문자열이다', () => {
+    expect(defaultLineAxis(['a', 'b'])).toBe('a')
+    expect(defaultLineAxis([])).toBe('')
   })
 })
