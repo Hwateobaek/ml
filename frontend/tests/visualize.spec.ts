@@ -10,6 +10,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   boxPlot,
+  categoryCounts,
+  crossTab,
+  groupedBoxPlots,
   correlation,
   correlationMatrix,
   descriptiveStats,
@@ -214,5 +217,55 @@ describe('outlierCounts', () => {
 
   it('숫자가 없는 열은 0이 아니라 목록에서 빠진다', () => {
     expect(outlierCounts(table, ['label']).has('label')).toBe(false)
+  })
+})
+
+describe('범주 그림', () => {
+  const table: Dataset = {
+    columns: ['species', 'island', 'mass'],
+    rows: [
+      ['Adelie', 'Torgersen', '3700'],
+      ['Gentoo', 'Biscoe', '5000'],
+      ['Adelie', 'Biscoe', '3500'],
+      ['Adelie', '', '3900'],
+      ['', 'Dream', '3600'],
+      ['Gentoo', 'Biscoe', ''],
+    ],
+  }
+
+  it('categoryCounts는 빈 칸을 빼고 이름 차례로 센다', () => {
+    expect(categoryCounts(table, 'species')).toEqual([
+      { value: 'Adelie', count: 3 },
+      { value: 'Gentoo', count: 2 },
+    ])
+  })
+
+  it('categoryCounts는 숫자가 든 이름을 수의 크기로 놓는다', () => {
+    const grades: Dataset = { columns: ['g'], rows: [['10'], ['2'], ['1'], ['2']] }
+    expect(categoryCounts(grades, 'g').map((item) => item.value)).toEqual(['1', '2', '10'])
+  })
+
+  it('groupedBoxPlots는 범주가 비거나 수가 아닌 행을 뺀다', () => {
+    const plots = groupedBoxPlots(table, 'mass', 'species')
+    expect(plots.map((item) => item.group)).toEqual(['Adelie', 'Gentoo'])
+    expect(plots[0]?.plot).toMatchObject({ min: 3500, median: 3700, max: 3900 })
+    expect(plots[1]?.plot).toMatchObject({ min: 5000, max: 5000 })
+  })
+
+  it('crossTab은 안 나온 조합도 0으로 칸을 둔다', () => {
+    expect(crossTab(table, 'island', 'species')).toEqual({
+      rows: ['Biscoe', 'Torgersen'],
+      columns: ['Adelie', 'Gentoo'],
+      counts: [
+        [1, 2],
+        [1, 0],
+      ],
+    })
+  })
+
+  it('없는 열이면 비어 있다', () => {
+    expect(categoryCounts(table, 'nope')).toEqual([])
+    expect(groupedBoxPlots(table, 'mass', 'nope')).toEqual([])
+    expect(crossTab(table, 'nope', 'species').rows).toEqual([])
   })
 })

@@ -95,7 +95,23 @@
     "allRows": "전체",
     "point": "{name} (가로 {x}, 세로 {y})",
     "correlation": "상관계수",
-    "correlationLead": "두 열이 함께 움직이는 정도입니다. 1에 가까우면 같이 커지고, -1에 가까우면 반대로 움직이며, 0에 가까우면 서로 관계가 약합니다."
+    "correlationLead": "두 열이 함께 움직이는 정도입니다. 1에 가까우면 같이 커지고, -1에 가까우면 반대로 움직이며, 0에 가까우면 서로 관계가 약합니다.",
+    "counts": "막대그래프",
+    "countsLead": "열의 값마다 몇 행인지 셉니다. 분류 문제의 타깃이라면 값마다 행 수가 너무 차이 나지 않는지 확인해 보세요.",
+    "countValue": "{count}행 ({percent})",
+    "blankExcluded": "빈 칸 {count}개는 세지 않았습니다.",
+    "groupedBoxPlot": "그룹별 상자그림",
+    "groupedBoxPlotLead": "숫자 열 하나를 범주별 상자그림으로 비교합니다. 상자끼리 멀리 떨어져 있을수록 그 열이 범주를 잘 구분합니다.",
+    "valueColumn": "값 열",
+    "groupColumn": "구분 열",
+    "groupSummary": "중앙값 {median} · 이상치 {outliers}개",
+    "groupBoxLabel": "{group}: 최솟값 {min}, 중앙값 {median}, 최댓값 {max}",
+    "crossTab": "교차표",
+    "crossTabLead": "두 열의 값이 함께 나온 행 수를 셉니다. 색이 진할수록 많습니다.",
+    "crossRows": "행 기준",
+    "crossColumns": "열 기준",
+    "crossCorner": "{rows} ＼ {columns}",
+    "total": "합계"
   },
   "steps": {
     "data": {

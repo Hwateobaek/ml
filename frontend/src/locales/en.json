@@ -95,7 +95,23 @@
     "allRows": "All rows",
     "point": "{name} (x {x}, y {y})",
     "correlation": "Correlation",
-    "correlationLead": "How much two columns move together. Near 1 they grow together, near -1 they move in opposite directions, and near 0 there is little relationship."
+    "correlationLead": "How much two columns move together. Near 1 they grow together, near -1 they move in opposite directions, and near 0 there is little relationship.",
+    "counts": "Bar chart",
+    "countsLead": "Count the rows for each value of a column. If it is the target you will classify, check that no value has far fewer rows than the others.",
+    "countValue": "{count} rows ({percent})",
+    "blankExcluded": "{count} blank cells were not counted.",
+    "groupedBoxPlot": "Box plots by group",
+    "groupedBoxPlotLead": "Split one numeric column by category and compare the box plots. The farther apart the boxes are, the better that column tells the categories apart.",
+    "valueColumn": "Value column",
+    "groupColumn": "Split by",
+    "groupSummary": "Median {median} · {outliers} outliers",
+    "groupBoxLabel": "{group}: minimum {min}, median {median}, maximum {max}",
+    "crossTab": "Crosstab",
+    "crossTabLead": "Count the rows where the values of two columns appear together. A darker cell means more rows.",
+    "crossRows": "Row values",
+    "crossColumns": "Column values",
+    "crossCorner": "{rows} ＼ {columns}",
+    "total": "Total"
   },
   "steps": {
     "data": {

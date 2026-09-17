@@ -296,3 +296,123 @@ export function correlationMatrix(dataset: Dataset, columns: readonly string[]):
     }),
   )
 }
+
+/* ── 범주 ── */
+
+/**
+ * 범주 값의 차례. **숫자가 섞인 이름은 수의 크기로 놓는다** — `1등급, 10등급, 2등급`이
+ * 아니라 `1, 2, 10`이다. 로케일을 고정하는 것은 같은 파일이 컴퓨터마다 다른 순서로
+ * 그려지지 않게 하려는 것이다.
+ */
+const categoryOrder = new Intl.Collator('ko', { numeric: true })
+
+function sortCategories(values: Iterable<string>): string[] {
+  return [...values].sort((left, right) => categoryOrder.compare(left, right))
+}
+
+/** 셀의 범주 값. **빈 칸은 범주가 아니다** — `null`로 돌려 세는 쪽이 빼게 한다. */
+function categoryOf(row: readonly string[], index: number): string | null {
+  const cell = (row[index] ?? '').trim()
+  return cell === '' ? null : cell
+}
+
+/** 범주 하나의 개수. */
+export interface CategoryCount {
+  readonly value: string
+  readonly count: number
+}
+
+/**
+ * 열의 값별 개수 — 막대그래프가 이것으로 선다. 값은 이름 차례이고, **빈 칸은 세지 않는다.**
+ *
+ * **개수 차례로 놓지 않는다.** `0/1`, `1등급/2등급/3등급`처럼 순서가 뜻인 열이 흔해서,
+ * 많은 순으로 섞으면 학생이 축을 읽다가 헷갈린다. 많고 적음은 막대 높이가 말한다.
+ */
+export function categoryCounts(dataset: Dataset, column: string): CategoryCount[] {
+  const index = dataset.columns.indexOf(column)
+  if (index < 0) return []
+  const counts = new Map<string, number>()
+  for (const row of dataset.rows) {
+    const value = categoryOf(row, index)
+    if (value !== null) counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+  return sortCategories(counts.keys()).map((value) => ({ value, count: counts.get(value) ?? 0 }))
+}
+
+/** 범주 하나의 상자그림. */
+export interface GroupBoxPlot {
+  readonly group: string
+  readonly plot: BoxPlot
+}
+
+/**
+ * 수치 열 하나를 범주별로 나눈 상자그림들. 범주는 이름 차례다.
+ *
+ * **범주가 비었거나 수가 아닌 행은 빠진다.** 숫자가 하나도 없는 범주는 목록에 없다 —
+ * 빈 상자를 그리면 "그 범주는 값이 0 근처"로 읽힌다.
+ *
+ * **이상치 경계는 범주마다 따로다.** 전처리가 자르는 경계(열 전체)와 다를 수 있고, 그것이
+ * 요점이다 — 한 종 안에서 튀는 값과 열 전체에서 튀는 값은 다른 질문이다.
+ */
+export function groupedBoxPlots(
+  dataset: Dataset,
+  valueColumn: string,
+  groupColumn: string,
+): GroupBoxPlot[] {
+  const valueIndex = dataset.columns.indexOf(valueColumn)
+  const groupIndex = dataset.columns.indexOf(groupColumn)
+  if (valueIndex < 0 || groupIndex < 0) return []
+  const buckets = new Map<string, number[]>()
+  for (const row of dataset.rows) {
+    const group = categoryOf(row, groupIndex)
+    const cell = (row[valueIndex] ?? '').trim()
+    const value = Number(cell)
+    if (group === null || cell === '' || !Number.isFinite(value)) continue
+    const bucket = buckets.get(group)
+    if (bucket === undefined) buckets.set(group, [value])
+    else bucket.push(value)
+  }
+  const plots: GroupBoxPlot[] = []
+  for (const group of sortCategories(buckets.keys())) {
+    const plot = boxPlot(buckets.get(group) ?? [])
+    if (plot !== null) plots.push({ group, plot })
+  }
+  return plots
+}
+
+/** 교차표. `counts[i][j]`가 `rows[i]`이면서 `columns[j]`인 행의 수다. */
+export interface CrossTab {
+  readonly rows: readonly string[]
+  readonly columns: readonly string[]
+  readonly counts: readonly (readonly number[])[]
+}
+
+/**
+ * 두 범주 열의 조합별 개수. **둘 중 하나라도 빈 칸인 행은 세지 않는다.**
+ *
+ * 한 번도 안 나온 조합도 칸이 있고 값이 0이다 — "그 섬에는 그 종이 없다"가 이 표에서
+ * 가장 많이 읽히는 사실이라, 칸을 빼면 그것이 안 보인다.
+ */
+export function crossTab(dataset: Dataset, rowColumn: string, columnColumn: string): CrossTab {
+  const rowIndex = dataset.columns.indexOf(rowColumn)
+  const columnIndex = dataset.columns.indexOf(columnColumn)
+  if (rowIndex < 0 || columnIndex < 0) return { rows: [], columns: [], counts: [] }
+  const pairs = new Map<string, Map<string, number>>()
+  const columnValues = new Set<string>()
+  for (const row of dataset.rows) {
+    const left = categoryOf(row, rowIndex)
+    const right = categoryOf(row, columnIndex)
+    if (left === null || right === null) continue
+    columnValues.add(right)
+    const line = pairs.get(left) ?? new Map<string, number>()
+    line.set(right, (line.get(right) ?? 0) + 1)
+    pairs.set(left, line)
+  }
+  const rows = sortCategories(pairs.keys())
+  const columns = sortCategories(columnValues)
+  return {
+    rows,
+    columns,
+    counts: rows.map((left) => columns.map((right) => pairs.get(left)?.get(right) ?? 0)),
+  }
+}

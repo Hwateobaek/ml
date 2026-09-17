@@ -42,6 +42,9 @@ import { summarizeColumns } from '@/data/columns'
 import {
   correlationMatrix,
   boxPlot,
+  categoryCounts,
+  crossTab,
+  groupedBoxPlots,
   histogram,
   numericPairs,
   numericValues,
@@ -83,13 +86,23 @@ const numericColumns = computed(() =>
 )
 
 /**
- * 색으로 나눌 수 있는 열. **값 종류가 팔레트보다 많으면 뺀다** — 색이 돌아가기 시작하면
- * 서로 다른 범주가 같은 색이 되고, 그림이 거짓말을 한다.
+ * 범주로 볼 수 있는 열 — 산점도의 색, 막대그래프, 그룹별 상자그림, 교차표가 함께 쓴다.
+ * **값 종류가 팔레트보다 많으면 뺀다** — 색이 돌아가기 시작하면 서로 다른 범주가 같은 색이
+ * 되고, 그림이 거짓말을 한다. 막대와 교차표도 그 이상이면 칸이 읽히지 않는다.
+ *
+ * **값 종류가 적은 수치 열도 든다.** `Survived`의 `0/1`, `Pclass`의 `1/2/3`처럼 범주를
+ * 숫자로 적은 열이 교실 데이터에 흔하고, 그 열이 바로 분류의 타깃이다. **수치 열은 색
+ * 한 바퀴(모양이 안 바뀌는 만큼)까지만이다** — 스무 행짜리 표에서는 길이·무게 같은 연속
+ * 값도 종류가 스물 남짓이라, 범주형과 같은 기준이면 목록이 연속 열로 찬다.
  */
 const groupColumns = computed(() =>
   summaries.value
-    .filter((column) => column.kind === 'categorical' && column.unique >= 2)
-    .filter((column) => column.unique <= FALLBACK_PALETTE.length * POINT_SHAPES.length)
+    .filter((column) => column.unique >= 2)
+    .filter((column) =>
+      column.kind === 'categorical'
+        ? column.unique <= FALLBACK_PALETTE.length * POINT_SHAPES.length
+        : column.unique <= FALLBACK_PALETTE.length,
+    )
     .map((column) => column.name),
 )
 
@@ -100,6 +113,14 @@ const distributionColumn = ref('')
 const xColumn = ref('')
 const yColumn = ref('')
 const groupColumn = ref(NO_GROUP)
+/** 막대그래프의 열. */
+const countColumn = ref('')
+/** 그룹별 상자그림 — 값을 볼 수치 열과 나눌 범주 열. */
+const boxValueColumn = ref('')
+const boxGroupColumn = ref('')
+/** 교차표의 행과 열. */
+const crossRowColumn = ref('')
+const crossColumnColumn = ref('')
 
 /**
  * 열이 바뀌면 고른 값을 다시 맞춘다.
@@ -113,6 +134,7 @@ watch(
     if (!columns.includes(distributionColumn.value)) distributionColumn.value = columns[0] ?? ''
     if (!columns.includes(xColumn.value)) xColumn.value = columns[0] ?? ''
     if (!columns.includes(yColumn.value)) yColumn.value = columns[1] ?? columns[0] ?? ''
+    if (!columns.includes(boxValueColumn.value)) boxValueColumn.value = columns[0] ?? ''
   },
   { immediate: true },
 )
@@ -122,6 +144,22 @@ watch(
   (columns) => {
     if (groupColumn.value !== NO_GROUP && !columns.includes(groupColumn.value)) {
       groupColumn.value = NO_GROUP
+    }
+    // 수치 열이 범주로도 들 수 있으니, 처음 고르는 값은 **범주형 열을 먼저** 잡는다.
+    const categorical = new Set(
+      summaries.value
+        .filter((column) => column.kind === 'categorical')
+        .map((column) => column.name),
+    )
+    const ordered = [
+      ...columns.filter((name) => categorical.has(name)),
+      ...columns.filter((name) => !categorical.has(name)),
+    ]
+    if (!columns.includes(countColumn.value)) countColumn.value = ordered[0] ?? ''
+    if (!columns.includes(boxGroupColumn.value)) boxGroupColumn.value = ordered[0] ?? ''
+    if (!columns.includes(crossRowColumn.value)) crossRowColumn.value = ordered[0] ?? ''
+    if (!columns.includes(crossColumnColumn.value)) {
+      crossColumnColumn.value = ordered[1] ?? ordered[0] ?? ''
     }
   },
   { immediate: true },
@@ -335,6 +373,118 @@ function withAlpha(hex: string, alpha: number): string {
   const blue = Number.parseInt(value.slice(4, 6), 16)
   return `rgba(${red}, ${green}, ${blue}, ${alpha.toFixed(3)})`
 }
+
+/* ── 범주 막대그래프 ── */
+
+const counts = computed(() =>
+  dataset.value && countColumn.value ? categoryCounts(dataset.value, countColumn.value) : [],
+)
+
+/** 빈 칸을 뺀 행 수. 툴팁의 비율이 이것을 분모로 쓴다 — 막대 높이의 합과 같아야 한다. */
+const countTotal = computed(() => counts.value.reduce((sum, item) => sum + item.count, 0))
+
+/** 막대에 들지 못한 빈 칸의 수. 0이 아니면 그래프 아래에 말한다. */
+const countBlank = computed(() => (dataset.value?.rows.length ?? 0) - countTotal.value)
+
+const countData = computed(() => ({
+  labels: counts.value.map((item) => item.value),
+  datasets: [
+    {
+      data: counts.value.map((item) => item.count),
+      backgroundColor: counts.value.map((_, index) => groupColor(index)),
+      borderRadius: 2,
+    },
+  ],
+}))
+
+const countOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false as const,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (item: TooltipItem<'bar'>) =>
+          t('visualize.countValue', {
+            count: item.parsed.y ?? 0,
+            percent: format.percent(
+              countTotal.value === 0 ? 0 : (item.parsed.y ?? 0) / countTotal.value,
+            ),
+          }),
+      },
+    },
+  },
+  scales: {
+    x: { grid: { color: line.value }, ticks: { color: ink.value } },
+    y: {
+      beginAtZero: true,
+      grid: { color: line.value },
+      ticks: { color: ink.value, precision: 0 },
+    },
+  },
+}))
+
+/* ── 그룹별 상자그림 ── */
+
+const groupedPlots = computed(() =>
+  dataset.value && boxValueColumn.value && boxGroupColumn.value
+    ? groupedBoxPlots(dataset.value, boxValueColumn.value, boxGroupColumn.value)
+    : [],
+)
+
+/**
+ * 모든 상자가 함께 쓰는 가로 눈금. **범주마다 따로 펴면 안 된다** — 그러면 상자의 자리가
+ * 전부 같아 보여서, 이 그림의 목적인 "범주끼리 견주기"가 사라진다.
+ */
+const groupedScale = computed(() => {
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+  for (const { plot } of groupedPlots.value) {
+    if (plot.min < min) min = plot.min
+    if (plot.max > max) max = plot.max
+  }
+  return { min, max }
+})
+
+function groupedX(value: number): number {
+  const { min, max } = groupedScale.value
+  if (!(max > min)) return BOX_WIDTH / 2
+  return ((value - min) / (max - min)) * BOX_WIDTH
+}
+
+/* ── 교차표 ── */
+
+const cross = computed(() =>
+  dataset.value && crossRowColumn.value && crossColumnColumn.value
+    ? crossTab(dataset.value, crossRowColumn.value, crossColumnColumn.value)
+    : { rows: [], columns: [], counts: [] },
+)
+
+const crossRowTotals = computed(() =>
+  cross.value.counts.map((line) => line.reduce((sum, count) => sum + count, 0)),
+)
+
+const crossColumnTotals = computed(() =>
+  cross.value.columns.map((_, index) =>
+    cross.value.counts.reduce((sum, line) => sum + (line[index] ?? 0), 0),
+  ),
+)
+
+const crossTotal = computed(() => crossRowTotals.value.reduce((sum, count) => sum + count, 0))
+
+/** 가장 많은 칸. 진하기의 기준이다. */
+const crossMax = computed(() => {
+  let max = 0
+  for (const line of cross.value.counts) for (const count of line) if (count > max) max = count
+  return max
+})
+
+/** 교차표 한 칸의 배경. **색은 하나다** — 개수에는 방향이 없어서 상관처럼 두 색을 안 쓴다. */
+function crossStyle(count: number): Record<string, string> {
+  const strength = crossMax.value === 0 ? 0 : (count / crossMax.value) * 0.85
+  return { backgroundColor: withAlpha(groupColor(1), strength) }
+}
 </script>
 
 <template>
@@ -360,97 +510,102 @@ function withAlpha(hex: string, alpha: number): string {
       **수치 열이 없으면 그릴 것이 없다.** 이유를 말하는 자리를 비워 두면 화면이 통째로
       빈 채로 서고, 교실에서는 그것이 고장으로 읽힌다 (`ClusterScatter.vue`의 같은 자리).
     -->
-    <AppEmpty
-      v-else-if="numericColumns.length === 0"
-      :reason="t('visualize.noNumericReason')"
-      :next="t('visualize.noNumericNext')"
-    />
-
+    <!--
+      **범주 그림은 수치 열이 없어도 선다** (막대그래프·교차표). 그래서 수치 열이 없다는
+      안내는 화면을 통째로 대신하지 않고, 수치 그림의 자리에만 선다.
+    -->
     <template v-else>
-      <!-- 분포 -->
-      <!--
+      <AppEmpty
+        v-if="numericColumns.length === 0"
+        :reason="t('visualize.noNumericReason')"
+        :next="t('visualize.noNumericNext')"
+      />
+
+      <template v-else>
+        <!-- 분포 -->
+        <!--
         **`min-w-0`이 세 카드에 다 있다.** 세로 flex의 칸은 기본이 `min-width: auto`라
         **안쪽이 넓으면 칸이 그만큼 벌어진다** — 상관 표는 열 수만큼 넓어지므로, 이게
         없으면 카드가 작업 공간을 밀어 화면이 옆으로 넘친다. 넘치는 폭은 그 표가
         자기 안에서 굴려 보여준다(`overflow-x-auto`).
       -->
-      <AppCard
-        class="min-w-0"
-        :title="t('visualize.distribution')"
-        :description="t('visualize.distributionLead')"
-      >
-        <div class="flex flex-col gap-4">
-          <label class="flex flex-wrap items-center gap-2">
-            <span class="font-bold text-ink-soft">{{ t('visualize.column') }}</span>
-            <select
-              v-model="distributionColumn"
-              class="rounded-field border border-line-strong bg-surface px-2 py-1"
-            >
-              <option v-for="name in numericColumns" :key="name" :value="name">
-                {{ label(name) }}
-              </option>
-            </select>
-          </label>
+        <AppCard
+          class="min-w-0"
+          :title="t('visualize.distribution')"
+          :description="t('visualize.distributionLead')"
+        >
+          <div class="flex flex-col gap-4">
+            <label class="flex flex-wrap items-center gap-2">
+              <span class="font-bold text-ink-soft">{{ t('visualize.column') }}</span>
+              <select
+                v-model="distributionColumn"
+                class="rounded-field border border-line-strong bg-surface px-2 py-1"
+              >
+                <option v-for="name in numericColumns" :key="name" :value="name">
+                  {{ label(name) }}
+                </option>
+              </select>
+            </label>
 
-          <div class="h-80 min-w-0">
-            <Bar :data="histogramData" :options="histogramOptions" />
-          </div>
+            <div class="h-80 min-w-0">
+              <Bar :data="histogramData" :options="histogramOptions" />
+            </div>
 
-          <dl v-if="summary" class="flex flex-wrap gap-x-6 gap-y-1">
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.min') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.min) }}</dd>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.q1') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.q1) }}</dd>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.median') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.median) }}</dd>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.q3') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.q3) }}</dd>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.max') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.max) }}</dd>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.outlierBounds') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">
-                {{
-                  summary.bounds
-                    ? t('visualize.outlierBoundsValue', {
-                        low: format.stat(summary.bounds.low),
-                        high: format.stat(summary.bounds.high),
-                      })
-                    : t('visualize.outlierBoundsFlat')
-                }}
-              </dd>
-            </div>
-            <div class="flex items-baseline gap-1.5">
-              <dt>
-                <AppBadge>{{ t('visualize.outlierCount') }}</AppBadge>
-              </dt>
-              <dd class="font-bold tabular-nums text-ink">{{ summary.outlierCount }}</dd>
-            </div>
-          </dl>
+            <dl v-if="summary" class="flex flex-wrap gap-x-6 gap-y-1">
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.min') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.min) }}</dd>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.q1') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.q1) }}</dd>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.median') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.median) }}</dd>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.q3') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.q3) }}</dd>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.max') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">{{ format.stat(summary.max) }}</dd>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.outlierBounds') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">
+                  {{
+                    summary.bounds
+                      ? t('visualize.outlierBoundsValue', {
+                          low: format.stat(summary.bounds.low),
+                          high: format.stat(summary.bounds.high),
+                        })
+                      : t('visualize.outlierBoundsFlat')
+                  }}
+                </dd>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <dt>
+                  <AppBadge>{{ t('visualize.outlierCount') }}</AppBadge>
+                </dt>
+                <dd class="font-bold tabular-nums text-ink">{{ summary.outlierCount }}</dd>
+              </div>
+            </dl>
 
-          <!--
+            <!--
             **상자그림은 히스토그램 아래에 선다.** 같은 열의 두 그림이라 따로 고르지 않는다.
 
             **SVG를 직접 그린다.** Chart.js에는 상자그림이 없고, 그것 하나 때문에 플러그인을
@@ -458,101 +613,129 @@ function withAlpha(hex: string, alpha: number): string {
             `vector-effect`로 굵기를 지키고, 글자는 그림 안에 두지 않는다 — 숫자는 위
             배지가 말한다.
           -->
-          <div v-if="summary" class="flex flex-col gap-1.5">
-            <h4 class="font-bold">{{ t('visualize.boxPlot') }}</h4>
-            <p class="text-ink-soft">{{ t('visualize.boxPlotLead') }}</p>
-            <svg
-              class="h-16 w-full"
-              :viewBox="`0 0 ${BOX_WIDTH} 60`"
-              preserveAspectRatio="none"
-              role="img"
-              :aria-label="t('visualize.boxPlot')"
-            >
-              <line
-                :x1="boxX(summary.whiskerLow)"
-                :x2="boxX(summary.q1)"
-                y1="30"
-                y2="30"
-                :stroke="ink"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
-              />
-              <line
-                :x1="boxX(summary.q3)"
-                :x2="boxX(summary.whiskerHigh)"
-                y1="30"
-                y2="30"
-                :stroke="ink"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
-              />
-              <line
-                v-for="(end, index) in [summary.whiskerLow, summary.whiskerHigh]"
-                :key="index"
-                :x1="boxX(end)"
-                :x2="boxX(end)"
-                y1="18"
-                y2="42"
-                :stroke="ink"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
-              />
-              <rect
-                :x="boxX(summary.q1)"
-                y="10"
-                :width="Math.max(boxX(summary.q3) - boxX(summary.q1), 1)"
-                height="40"
-                :fill="groupColor(1)"
-                fill-opacity="0.35"
-                :stroke="groupColor(1)"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
-              />
-              <line
-                :x1="boxX(summary.median)"
-                :x2="boxX(summary.median)"
-                y1="10"
-                y2="50"
-                :stroke="ink"
-                stroke-width="2.5"
-                vector-effect="non-scaling-stroke"
-              />
-              <!--
+            <div v-if="summary" class="flex flex-col gap-1.5">
+              <h4 class="font-bold">{{ t('visualize.boxPlot') }}</h4>
+              <p class="text-ink-soft">{{ t('visualize.boxPlotLead') }}</p>
+              <svg
+                class="h-16 w-full"
+                :viewBox="`0 0 ${BOX_WIDTH} 60`"
+                preserveAspectRatio="none"
+                role="img"
+                :aria-label="t('visualize.boxPlot')"
+              >
+                <line
+                  :x1="boxX(summary.whiskerLow)"
+                  :x2="boxX(summary.q1)"
+                  y1="30"
+                  y2="30"
+                  :stroke="ink"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <line
+                  :x1="boxX(summary.q3)"
+                  :x2="boxX(summary.whiskerHigh)"
+                  y1="30"
+                  y2="30"
+                  :stroke="ink"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <line
+                  v-for="(end, index) in [summary.whiskerLow, summary.whiskerHigh]"
+                  :key="index"
+                  :x1="boxX(end)"
+                  :x2="boxX(end)"
+                  y1="18"
+                  y2="42"
+                  :stroke="ink"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <rect
+                  :x="boxX(summary.q1)"
+                  y="10"
+                  :width="Math.max(boxX(summary.q3) - boxX(summary.q1), 1)"
+                  height="40"
+                  :fill="groupColor(1)"
+                  fill-opacity="0.35"
+                  :stroke="groupColor(1)"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <line
+                  :x1="boxX(summary.median)"
+                  :x2="boxX(summary.median)"
+                  y1="10"
+                  y2="50"
+                  :stroke="ink"
+                  stroke-width="2.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <!--
                 **점이 아니라 짧은 세로선이다.** 가로로만 늘어나는 그림이라 원은 타원이
                 된다. 색은 상자와 다른 팔레트 칸이라 겹쳐도 갈린다.
               -->
-              <line
-                v-for="value in summary.marks"
-                :key="value"
-                :x1="boxX(value)"
-                :x2="boxX(value)"
-                y1="20"
-                y2="40"
-                :stroke="groupColor(0)"
-                stroke-width="2"
-                vector-effect="non-scaling-stroke"
-              />
-            </svg>
+                <line
+                  v-for="value in summary.marks"
+                  :key="value"
+                  :x1="boxX(value)"
+                  :x2="boxX(value)"
+                  y1="20"
+                  y2="40"
+                  :stroke="groupColor(0)"
+                  stroke-width="2"
+                  vector-effect="non-scaling-stroke"
+                />
+              </svg>
+            </div>
           </div>
+        </AppCard>
+      </template>
+
+      <!-- 범주 막대그래프 -->
+      <AppCard
+        v-if="groupColumns.length > 0"
+        class="min-w-0"
+        :title="t('visualize.counts')"
+        :description="t('visualize.countsLead')"
+      >
+        <div class="flex flex-col gap-4">
+          <label class="flex flex-wrap items-center gap-2">
+            <span class="font-bold text-ink-soft">{{ t('visualize.column') }}</span>
+            <select
+              v-model="countColumn"
+              class="rounded-field border border-line-strong bg-surface px-2 py-1"
+            >
+              <option v-for="name in groupColumns" :key="name" :value="name">
+                {{ label(name) }}
+              </option>
+            </select>
+          </label>
+
+          <div class="h-80 min-w-0">
+            <Bar :data="countData" :options="countOptions" />
+          </div>
+
+          <p v-if="countBlank > 0" class="text-ink-faint">
+            {{ t('visualize.blankExcluded', { count: countBlank }) }}
+          </p>
         </div>
       </AppCard>
 
-      <!-- 산점도 -->
+      <!-- 그룹별 상자그림 -->
       <AppCard
+        v-if="numericColumns.length > 0 && groupColumns.length > 0"
         class="min-w-0"
-        :title="t('visualize.scatter')"
-        :description="t('visualize.scatterLead')"
+        :title="t('visualize.groupedBoxPlot')"
+        :description="t('visualize.groupedBoxPlotLead')"
       >
-        <div v-if="numericColumns.length < 2" class="text-ink-soft">
-          {{ t('visualize.scatterNeedsTwo', { count: numericColumns.length }) }}
-        </div>
-
-        <div v-else class="flex flex-col gap-4">
+        <div class="flex flex-col gap-4">
           <div class="flex flex-col gap-2 sm:flex-row sm:gap-5">
             <label class="flex items-center gap-2">
-              <span class="font-bold text-ink-soft">{{ t('visualize.axisX') }}</span>
+              <span class="font-bold text-ink-soft">{{ t('visualize.valueColumn') }}</span>
               <select
-                v-model="xColumn"
+                v-model="boxValueColumn"
                 class="rounded-field border border-line-strong bg-surface px-2 py-1"
               >
                 <option v-for="name in numericColumns" :key="name" :value="name">
@@ -562,24 +745,11 @@ function withAlpha(hex: string, alpha: number): string {
             </label>
 
             <label class="flex items-center gap-2">
-              <span class="font-bold text-ink-soft">{{ t('visualize.axisY') }}</span>
+              <span class="font-bold text-ink-soft">{{ t('visualize.groupColumn') }}</span>
               <select
-                v-model="yColumn"
+                v-model="boxGroupColumn"
                 class="rounded-field border border-line-strong bg-surface px-2 py-1"
               >
-                <option v-for="name in numericColumns" :key="name" :value="name">
-                  {{ label(name) }}
-                </option>
-              </select>
-            </label>
-
-            <label v-if="groupColumns.length > 0" class="flex items-center gap-2">
-              <span class="font-bold text-ink-soft">{{ t('visualize.groupBy') }}</span>
-              <select
-                v-model="groupColumn"
-                class="rounded-field border border-line-strong bg-surface px-2 py-1"
-              >
-                <option :value="NO_GROUP">{{ t('visualize.groupNone') }}</option>
                 <option v-for="name in groupColumns" :key="name" :value="name">
                   {{ label(name) }}
                 </option>
@@ -587,28 +757,183 @@ function withAlpha(hex: string, alpha: number): string {
             </label>
           </div>
 
-          <div class="h-96 min-w-0">
-            <Scatter :data="scatterData" :options="scatterOptions" />
+          <!--
+            **범주마다 한 줄이고 가로 눈금은 모두 같다** (`groupedScale`). 이름과 숫자는 그림
+            밖 HTML이다 — 가로로만 늘어나는 SVG 안에 글자를 두면 찌그러진다.
+          -->
+          <div class="flex flex-col gap-2">
+            <div
+              v-for="(item, index) in groupedPlots"
+              :key="item.group"
+              class="grid grid-cols-1 items-center gap-1 sm:grid-cols-4 sm:gap-3"
+            >
+              <div class="min-w-0">
+                <p class="truncate font-bold">{{ item.group }}</p>
+                <p class="text-ink-soft tabular-nums">
+                  {{
+                    t('visualize.groupSummary', {
+                      median: format.stat(item.plot.median),
+                      outliers: item.plot.outlierCount,
+                    })
+                  }}
+                </p>
+              </div>
+              <svg
+                class="h-12 w-full sm:col-span-3"
+                :viewBox="`0 0 ${BOX_WIDTH} 60`"
+                preserveAspectRatio="none"
+                role="img"
+                :aria-label="
+                  t('visualize.groupBoxLabel', {
+                    group: item.group,
+                    min: format.stat(item.plot.min),
+                    median: format.stat(item.plot.median),
+                    max: format.stat(item.plot.max),
+                  })
+                "
+              >
+                <line
+                  :x1="groupedX(item.plot.whiskerLow)"
+                  :x2="groupedX(item.plot.whiskerHigh)"
+                  y1="30"
+                  y2="30"
+                  :stroke="ink"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <line
+                  v-for="(end, endIndex) in [item.plot.whiskerLow, item.plot.whiskerHigh]"
+                  :key="endIndex"
+                  :x1="groupedX(end)"
+                  :x2="groupedX(end)"
+                  y1="18"
+                  y2="42"
+                  :stroke="ink"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <rect
+                  :x="groupedX(item.plot.q1)"
+                  y="10"
+                  :width="Math.max(groupedX(item.plot.q3) - groupedX(item.plot.q1), 1)"
+                  height="40"
+                  :fill="groupColor(index)"
+                  fill-opacity="0.45"
+                  :stroke="groupColor(index)"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <line
+                  :x1="groupedX(item.plot.median)"
+                  :x2="groupedX(item.plot.median)"
+                  y1="10"
+                  y2="50"
+                  :stroke="ink"
+                  stroke-width="2.5"
+                  vector-effect="non-scaling-stroke"
+                />
+                <line
+                  v-for="value in item.plot.marks"
+                  :key="value"
+                  :x1="groupedX(value)"
+                  :x2="groupedX(value)"
+                  y1="20"
+                  y2="40"
+                  :stroke="ink"
+                  stroke-width="2"
+                  vector-effect="non-scaling-stroke"
+                />
+              </svg>
+            </div>
+
+            <!-- 공통 눈금의 양 끝. 상자들이 어디쯤인지 숫자로 읽는 자리다. -->
+            <div
+              v-if="groupedPlots.length > 0"
+              class="grid grid-cols-1 gap-1 sm:grid-cols-4 sm:gap-3"
+            >
+              <div class="hidden sm:block"></div>
+              <div class="flex justify-between text-ink-soft tabular-nums sm:col-span-3">
+                <span>{{ format.stat(groupedScale.min) }}</span>
+                <span>{{ format.stat(groupedScale.max) }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </AppCard>
 
-      <!-- 상관 히트맵 -->
-      <AppCard
-        class="min-w-0"
-        :title="t('visualize.correlation')"
-        :description="t('visualize.correlationLead')"
-      >
-        <div v-if="numericColumns.length < 2" class="text-ink-soft">
-          {{ t('visualize.scatterNeedsTwo', { count: numericColumns.length }) }}
-        </div>
+      <template v-if="numericColumns.length > 0">
+        <!-- 산점도 -->
+        <AppCard
+          class="min-w-0"
+          :title="t('visualize.scatter')"
+          :description="t('visualize.scatterLead')"
+        >
+          <div v-if="numericColumns.length < 2" class="text-ink-soft">
+            {{ t('visualize.scatterNeedsTwo', { count: numericColumns.length }) }}
+          </div>
 
-        <!--
+          <div v-else class="flex flex-col gap-4">
+            <div class="flex flex-col gap-2 sm:flex-row sm:gap-5">
+              <label class="flex items-center gap-2">
+                <span class="font-bold text-ink-soft">{{ t('visualize.axisX') }}</span>
+                <select
+                  v-model="xColumn"
+                  class="rounded-field border border-line-strong bg-surface px-2 py-1"
+                >
+                  <option v-for="name in numericColumns" :key="name" :value="name">
+                    {{ label(name) }}
+                  </option>
+                </select>
+              </label>
+
+              <label class="flex items-center gap-2">
+                <span class="font-bold text-ink-soft">{{ t('visualize.axisY') }}</span>
+                <select
+                  v-model="yColumn"
+                  class="rounded-field border border-line-strong bg-surface px-2 py-1"
+                >
+                  <option v-for="name in numericColumns" :key="name" :value="name">
+                    {{ label(name) }}
+                  </option>
+                </select>
+              </label>
+
+              <label v-if="groupColumns.length > 0" class="flex items-center gap-2">
+                <span class="font-bold text-ink-soft">{{ t('visualize.groupBy') }}</span>
+                <select
+                  v-model="groupColumn"
+                  class="rounded-field border border-line-strong bg-surface px-2 py-1"
+                >
+                  <option :value="NO_GROUP">{{ t('visualize.groupNone') }}</option>
+                  <option v-for="name in groupColumns" :key="name" :value="name">
+                    {{ label(name) }}
+                  </option>
+                </select>
+              </label>
+            </div>
+
+            <div class="h-96 min-w-0">
+              <Scatter :data="scatterData" :options="scatterOptions" />
+            </div>
+          </div>
+        </AppCard>
+
+        <!-- 상관 히트맵 -->
+        <AppCard
+          class="min-w-0"
+          :title="t('visualize.correlation')"
+          :description="t('visualize.correlationLead')"
+        >
+          <div v-if="numericColumns.length < 2" class="text-ink-soft">
+            {{ t('visualize.scatterNeedsTwo', { count: numericColumns.length }) }}
+          </div>
+
+          <!--
           **표로 그린다.** 히트맵을 위해 차트 라이브러리를 하나 더 들이지 않는다 - 값이
           칸에 그대로 적히므로 색을 못 읽어도 읽히고, 화면 낭독기도 이 표를 읽는다.
         -->
-        <div v-else class="overflow-x-auto">
-          <!--
+          <div v-else class="overflow-x-auto">
+            <!--
             **표의 이름은 `aria-label`로 준다. `<caption class="sr-only">`는 쓰면 안 된다**
             (2026-09-10, 사용자가 화면에서 잡았다).
 
@@ -617,39 +942,142 @@ function withAlpha(hex: string, alpha: number): string {
             못 자르고, 그 한 줄이 **문서를 1,595px까지 늘려** 작업 공간째 화면 밖으로
             밀어 올렸다 — 화면에는 아무것도 안 보이는 자리라 원인을 짚기 어렵다.
           -->
-          <table class="border-collapse" :aria-label="t('visualize.correlation')">
-            <thead>
-              <tr>
-                <td></td>
-                <th
-                  v-for="name in numericColumns"
-                  :key="name"
-                  scope="col"
-                  class="px-2 py-1 text-left font-bold text-ink-soft"
-                >
+            <table class="border-collapse" :aria-label="t('visualize.correlation')">
+              <thead>
+                <tr>
+                  <td></td>
+                  <th
+                    v-for="name in numericColumns"
+                    :key="name"
+                    scope="col"
+                    class="px-2 py-1 text-left font-bold text-ink-soft"
+                  >
+                    {{ label(name) }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(name, row) in numericColumns" :key="name">
+                  <th
+                    scope="row"
+                    class="py-1 pr-3 text-left font-bold whitespace-nowrap text-ink-soft"
+                  >
+                    {{ label(name) }}
+                  </th>
+                  <td
+                    v-for="(other, cell) in numericColumns"
+                    :key="other"
+                    class="px-2 py-1 text-center tabular-nums"
+                    :style="correlationStyle(correlations[row]?.[cell] ?? 0)"
+                  >
+                    {{ format.metric(correlations[row]?.[cell] ?? 0, 'number') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </AppCard>
+      </template>
+
+      <!-- 교차표 -->
+      <AppCard
+        v-if="groupColumns.length > 0"
+        class="min-w-0"
+        :title="t('visualize.crossTab')"
+        :description="t('visualize.crossTabLead')"
+      >
+        <div class="flex flex-col gap-4">
+          <div class="flex flex-col gap-2 sm:flex-row sm:gap-5">
+            <label class="flex items-center gap-2">
+              <span class="font-bold text-ink-soft">{{ t('visualize.crossRows') }}</span>
+              <select
+                v-model="crossRowColumn"
+                class="rounded-field border border-line-strong bg-surface px-2 py-1"
+              >
+                <option v-for="name in groupColumns" :key="name" :value="name">
                   {{ label(name) }}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(name, row) in numericColumns" :key="name">
-                <th
-                  scope="row"
-                  class="py-1 pr-3 text-left font-bold whitespace-nowrap text-ink-soft"
-                >
+                </option>
+              </select>
+            </label>
+
+            <label class="flex items-center gap-2">
+              <span class="font-bold text-ink-soft">{{ t('visualize.crossColumns') }}</span>
+              <select
+                v-model="crossColumnColumn"
+                class="rounded-field border border-line-strong bg-surface px-2 py-1"
+              >
+                <option v-for="name in groupColumns" :key="name" :value="name">
                   {{ label(name) }}
-                </th>
-                <td
-                  v-for="(other, cell) in numericColumns"
-                  :key="other"
-                  class="px-2 py-1 text-center tabular-nums"
-                  :style="correlationStyle(correlations[row]?.[cell] ?? 0)"
-                >
-                  {{ format.metric(correlations[row]?.[cell] ?? 0, 'number') }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <!-- 상관 표와 같은 이유로 `aria-label`이다 (`<caption class="sr-only">`를 쓰지 마라). -->
+          <div class="overflow-x-auto">
+            <table class="border-collapse" :aria-label="t('visualize.crossTab')">
+              <thead>
+                <tr>
+                  <th
+                    scope="col"
+                    class="py-1 pr-3 text-left font-normal whitespace-nowrap text-ink-faint"
+                  >
+                    {{
+                      t('visualize.crossCorner', {
+                        rows: label(crossRowColumn),
+                        columns: label(crossColumnColumn),
+                      })
+                    }}
+                  </th>
+                  <th
+                    v-for="name in cross.columns"
+                    :key="name"
+                    scope="col"
+                    class="px-3 py-1 text-center font-bold whitespace-nowrap text-ink-soft"
+                  >
+                    {{ name }}
+                  </th>
+                  <th scope="col" class="px-3 py-1 text-center font-bold text-ink-soft">
+                    {{ t('visualize.total') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(name, row) in cross.rows" :key="name">
+                  <th
+                    scope="row"
+                    class="py-1 pr-3 text-left font-bold whitespace-nowrap text-ink-soft"
+                  >
+                    {{ name }}
+                  </th>
+                  <td
+                    v-for="(other, cell) in cross.columns"
+                    :key="other"
+                    class="px-3 py-1 text-center tabular-nums"
+                    :style="crossStyle(cross.counts[row]?.[cell] ?? 0)"
+                  >
+                    {{ cross.counts[row]?.[cell] ?? 0 }}
+                  </td>
+                  <td class="px-3 py-1 text-center font-bold tabular-nums">
+                    {{ crossRowTotals[row] }}
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" class="py-1 pr-3 text-left font-bold text-ink-soft">
+                    {{ t('visualize.total') }}
+                  </th>
+                  <td
+                    v-for="(total, cell) in crossColumnTotals"
+                    :key="cell"
+                    class="px-3 py-1 text-center font-bold tabular-nums"
+                  >
+                    {{ total }}
+                  </td>
+                  <td class="px-3 py-1 text-center font-bold tabular-nums">{{ crossTotal }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </AppCard>
     </template>
