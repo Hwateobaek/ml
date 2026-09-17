@@ -17,13 +17,17 @@ import type { Preprocessing } from '@/project/schema'
  * 이 칸에 앉은 값이 **무엇인가.** 화면이 자릿수를 어떻게 줄지가 이것으로 갈린다.
  *
  * - `raw` — 학생의 자료가 그대로 지나갔다. **우리가 자를 자리가 아니다.**
- * - `scaled` — `(x-중심)/폭`. 계산해 낸 통계라 유효숫자를 줄인다.
+ * - `clipped` — 스케일은 안 했지만 **경계 밖 값이 경계값으로 바뀌었다** (`FittedColumn.clip`).
+ *   `raw`로 두면 머리글이 "그대로 쓴 값"이라고 말하는데 칸에는 경계값이 앉는다. 경계는
+ *   훈련 데이터의 통계라 유효숫자를 줄인다.
+ * - `scaled` — `(x-중심)/폭`. 계산해 낸 통계라 유효숫자를 줄인다. 클리핑도 했으면 여기다 —
+ *   자른 뒤에 스케일했으므로 머리글은 마지막에 일어난 일을 말한다.
  * - `code` — 원-핫의 0/1이거나 순서 인코딩의 번호. 언제나 정수다.
  *
  * **화면에서 세지 않는 이유는 여기가 검사할 수 있는 전부이기 때문이다** — `scale`이
  * 붙었는지는 전처리기가 알고, 그걸 화면이 다시 알아내면 규칙이 두 벌이 된다.
  */
-export type PreviewValueKind = 'raw' | 'scaled' | 'code'
+export type PreviewValueKind = 'raw' | 'clipped' | 'scaled' | 'code'
 
 /** 원본 열 하나가 만들어 낸 특성 하나. */
 export interface PreviewFeature {
@@ -94,7 +98,8 @@ function widthOf(
  */
 function valueKindOf(column: Preprocessor['columns'][number]): PreviewValueKind {
   if (column.kind !== 'numeric') return 'code'
-  return column.scale ? 'scaled' : 'raw'
+  if (column.scale) return 'scaled'
+  return column.clip ? 'clipped' : 'raw'
 }
 
 /**

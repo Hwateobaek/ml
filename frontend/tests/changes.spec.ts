@@ -406,6 +406,73 @@ describe('이미지 설정의 변경도 말한다', () => {
   })
 })
 
+/**
+ * 이상치 처리 (open-decisions.md "이상치는 훈련 데이터의 IQR로 클리핑한다").
+ *
+ * **필드가 없는 것과 `none`이 같아야 한다.** v3 전에 학습한 실험에는 필드가 없고, 그
+ * 뒤에 [안 함]을 누르면 `none`이 적힌다 — 둘이 다르게 잡히면 아무것도 안 바꾼 학생에게
+ * 이상치 처리가 바뀌었다고 뜬다 (`ml/experiment.ts`의 `withOutlierDefault`).
+ */
+describe('이상치 처리 변경', () => {
+  const base = { missing: 'mean', scaling: 'none', categoricalEncoding: 'onehot' } as const
+
+  it('클리핑을 켜면 경로가 뜨고 어휘로 말한다', async () => {
+    const changes = await changesOf({ preprocessing: { ...base, outliers: 'clip' } })
+    expect(changes).toEqual([
+      {
+        path: 'preprocessing.outliers',
+        labelKey: 'preprocess.tabular.outliers',
+        from: { kind: 'locale', key: 'outlierMethod.none' },
+        to: { kind: 'locale', key: 'outlierMethod.clip' },
+      },
+    ])
+  })
+
+  it('필드 없음에서 none으로 가는 것은 변경이 아니다', async () => {
+    const { second } = await twice({ preprocessing: { ...base, outliers: 'none' } })
+    expect(second.changed ?? []).not.toContain('preprocessing.outliers')
+  })
+
+  /**
+   * **범위는 쓰인 것만 견준다** (`ml/experiment.ts`의 `withOutlierDefault`). `range`를
+   * 안 고른 동안 남은 숫자와 특성에서 뺀 열의 숫자는 학습에 아무 일도 안 했다.
+   */
+  describe('범위는 쓰인 것만 견준다', () => {
+    const feature = IRIS_FEATURE_COLUMNS[0] ?? ''
+
+    it('범위를 걸면 목록으로 뜬다', async () => {
+      const changes = await changesOf({
+        preprocessing: {
+          ...base,
+          outliers: 'range',
+          ranges: { [feature]: { min: 4.5, max: 7.5 } },
+        },
+      })
+      const ranges = changes.find((change) => change.path === 'preprocessing.ranges')
+      expect(ranges?.labelKey).toBe('preprocess.tabular.ranges')
+      expect(ranges?.to).toMatchObject({
+        kind: 'count',
+        count: 1,
+        items: [`${feature} [4.5, 7.5]`],
+      })
+    })
+
+    it('range를 안 골랐으면 적어 둔 숫자가 이력에 안 뜬다', async () => {
+      const { second } = await twice({
+        preprocessing: { ...base, outliers: 'clip', ranges: { [feature]: { min: 4.5 } } },
+      })
+      expect(second.changed ?? []).not.toContain('preprocessing.ranges')
+    })
+
+    it('특성이 아닌 열의 범위는 이력에 안 뜬다', async () => {
+      const { second } = await twice({
+        preprocessing: { ...base, outliers: 'range', ranges: { 없는열: { min: 1 } } },
+      })
+      expect(second.changed ?? []).not.toContain('preprocessing.ranges')
+    })
+  })
+})
+
 describe('모르는 경로도 버리지 않는다', () => {
   it('등록부에 없으면 라벨이 null이고 값은 그대로 온다', async () => {
     const { first, second } = await twice({})

@@ -42,7 +42,12 @@ import {
   type TableDocument,
 } from '@/data/table'
 import ColumnInspector from './ColumnInspector.vue'
+import FullDataDialog from './FullDataDialog.vue'
+import { columnLabel, withColumnLabel } from '@/data/column-labels'
+import { outlierCounts } from '@/data/visualize'
 import { TABLE_PREVIEW_ROW_COUNT } from '@/limits'
+import { withColumnLabels } from '@/project/settings'
+import { tabularDataOf } from '@/project/schema'
 import { applyDataset, readDataset } from '@/project/dataset'
 import { useProjectStore } from '@/stores/project'
 import { useToastStore } from '@/stores/toasts'
@@ -76,6 +81,28 @@ const hasHeader = ref(true)
 const confirming = ref(false)
 /** 열 검사기에서 펼쳐 놓은 열. 보조 영역이라 기본은 닫혀 있다. */
 const inspecting = ref(false)
+/** 전체 데이터를 보는 팝업. */
+const viewingAll = ref(false)
+
+/** 학생이 고쳐 부르는 열 이름. 확정된 표에만 있다 (`data/column-labels.ts`). */
+const columnLabels = computed(() => tabularDataOf(project.file?.document)?.columnLabels ?? {})
+
+/**
+ * 열 하나를 뭐라고 부를지 바꾼다.
+ *
+ * **정본은 안 건드린다** — 바뀌는 것은 설정의 대응표뿐이고, 타깃·특성·전처리는 원본
+ * 이름을 키로 들고 있어 그대로 붙어 있다 (`project/settings.ts`의 `withColumnLabels`).
+ */
+function rename(original: string, next: string): void {
+  project.update((live) => ({
+    ...live,
+    document: withColumnLabels(
+      live.document,
+      withColumnLabel(tabularDataOf(live.document)?.columnLabels, original, next),
+      new Date().toISOString(),
+    ),
+  }))
+}
 
 const experimentCount = computed(() => project.file?.document.runs.experiments.length ?? 0)
 
@@ -96,6 +123,19 @@ const saved = computed(() => {
   const dataset = readDataset(project.file)
   if (!dataset || !reference) return null
   return { reference, dataset, columns: summarizeColumns(dataset) }
+})
+
+/**
+ * 열마다 이상치 개수. **확정한 표 전체로 센다** — 미리보기의 앞 스무 줄로 사분위수를
+ * 구하면 표 전체와 다른 경계가 나온다. 고르는 중인 파일에는 없다.
+ */
+const outliers = computed(() => {
+  const current = saved.value
+  if (!current || opened.value) return undefined
+  return outlierCounts(
+    current.dataset,
+    current.columns.filter((column) => column.kind === 'numeric').map((column) => column.name),
+  )
 })
 
 /** 지금 화면에 그릴 표. 파일을 고르는 중이면 그쪽이 이긴다. */
@@ -328,9 +368,19 @@ function kindOf(column: ColumnSummary): string {
         <span v-if="!hasHeader" class="text-ink-soft">{{ t('data.tabular.noHeaderNote') }}</span>
       </template>
 
-      <AppButton v-else variant="secondary" :disabled="busy" @click="fileInput?.click()">
-        {{ busy ? t('data.tabular.reading') : t('data.tabular.change') }}
-      </AppButton>
+      <template v-else>
+        <AppButton variant="secondary" :disabled="busy" @click="fileInput?.click()">
+          {{ busy ? t('data.tabular.reading') : t('data.tabular.change') }}
+        </AppButton>
+
+        <!--
+          **확정한 표에만 있다.** 아직 확정하지 않은 미리보기에는 앞 스무 줄밖에 없어서
+          "전체"라고 부를 것이 없다.
+        -->
+        <AppButton v-if="saved" variant="secondary" @click="viewingAll = true">
+          {{ t('data.tabular.viewAll') }}
+        </AppButton>
+      </template>
 
       <template #end>
         <template v-if="opened">
@@ -372,7 +422,7 @@ function kindOf(column: ColumnSummary): string {
           <thead class="sticky top-0 z-10">
             <tr>
               <th v-for="column in shown.columns" :key="column.name" class="align-bottom">
-                <span class="block text-ink">{{ column.name }}</span>
+                <span class="block text-ink">{{ columnLabel(column.name, columnLabels) }}</span>
                 <span class="block font-normal">{{ kindOf(column) }}</span>
               </th>
             </tr>
@@ -408,7 +458,13 @@ function kindOf(column: ColumnSummary): string {
       >
         <h3 class="leading-tight font-bold text-ink-soft">{{ t('data.tabular.inspector') }}</h3>
         <div class="flex min-h-0 flex-1 flex-col">
-          <ColumnInspector :columns="shown.columns" />
+          <ColumnInspector
+            :columns="shown.columns"
+            :labels="columnLabels"
+            :editable="!shown.draft"
+            :outliers="outliers"
+            @rename="rename"
+          />
         </div>
       </aside>
     </div>
@@ -434,7 +490,13 @@ function kindOf(column: ColumnSummary): string {
         {{ t('data.tabular.inspector') }}
       </summary>
       <div class="max-h-72 overflow-y-auto border-t border-line p-3">
-        <ColumnInspector :columns="shown.columns" />
+        <ColumnInspector
+          :columns="shown.columns"
+          :labels="columnLabels"
+          :editable="!shown.draft"
+          :outliers="outliers"
+          @rename="rename"
+        />
       </div>
     </details>
 
@@ -455,5 +517,17 @@ function kindOf(column: ColumnSummary): string {
         </AppButton>
       </template>
     </AppDialog>
+
+    <!--
+      **정본을 통째로 넘긴다.** 자르는 것은 팝업 안의 쪽 나눔이 한다 — 여기서 미리
+      잘라 주면 "전체"가 아니게 된다.
+    -->
+    <FullDataDialog
+      v-if="saved"
+      :open="viewingAll"
+      :dataset="saved.dataset"
+      :labels="columnLabels"
+      @close="viewingAll = false"
+    />
   </div>
 </template>

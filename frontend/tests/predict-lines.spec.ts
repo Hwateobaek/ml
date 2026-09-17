@@ -150,7 +150,7 @@ const PREPROCESSING: Preprocessing = {
  * (`reachability-through-real-entry`).
  */
 function clusterFixture() {
-  const rows = usableRows(DATASET, FEATURES, undefined, PREPROCESSING.missing)
+  const rows = usableRows(DATASET, FEATURES, undefined, PREPROCESSING.missing, undefined)
   const preprocessor = fitPreprocessor(DATASET, rows, FEATURES, PREPROCESSING)
   const matrix = transform(preprocessor, DATASET, rows, PREPROCESSING.categoricalEncoding)
   const fitted = fitKMeans(matrix, 2, 42)

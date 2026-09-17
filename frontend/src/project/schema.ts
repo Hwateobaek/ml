@@ -35,11 +35,12 @@ import { TRAINING_LOCATIONS } from '../ml/backend'
 /**
  * 이 앱이 읽고 쓰는 포맷 버전. 마이그레이션 체인의 종착점이다.
  *
- * **2로 올린 것은 백본 id 개정이다** (2026-08-19, mlpx-spec.md §9.1). 지시 없이
- * 움직이는 숫자가 아니다 — 무엇이 함께 와야 하는지는 `project/migrate.ts`와
- * `tests/versions.spec.ts`가 말한다.
+ * **2로 올린 것은 백본 id 개정이다** (2026-08-19, mlpx-spec.md §9.1). **3은 이상치
+ * 클리핑 어휘다** (2026-09-17, §9.2, 코드 소유자가 지시했다). 지시 없이 움직이는 숫자가
+ * 아니다 — 무엇이 함께 와야 하는지는 `project/migrate.ts`와 `tests/versions.spec.ts`가
+ * 말한다.
  */
-export const FORMAT_VERSION = 2
+export const FORMAT_VERSION = 3
 
 /**
  * 이 앱이 만드는 프로젝트의 종류. **manifest.kind의 값이고 지금은 이것 하나뿐이다.**
@@ -89,6 +90,18 @@ export const SCALING_METHODS = ['none', 'standard', 'minmax', 'robust'] as const
 
 /** 범주형 인코딩. */
 export const CATEGORICAL_ENCODINGS = ['none', 'onehot', 'ordinal'] as const
+
+/**
+ * 이상치 처리 (open-decisions.md "이상치는 훈련 데이터의 IQR로 클리핑한다").
+ *
+ * - `clip` — 훈련 데이터의 IQR 경계 밖 값을 경계값으로 바꾼다. 행은 그대로다.
+ * - `range` — **사람이 적은** 범위(`preprocessing.ranges`) 밖의 행을 뺀다. 경계를 데이터에서
+ *   구하지 않으므로 분할 전에 빼도 누수가 없다 (`ml/ranges.ts`).
+ *
+ * **IQR 경계로 행을 빼는 선택지는 없다.** 그 경계는 분할 뒤에 구해야 하는데 행은 분할 전에
+ * 빠져서 자리가 모순된다 — 같은 결정문에 이유가 있다.
+ */
+export const OUTLIER_METHODS = ['none', 'clip', 'range'] as const
 
 /**
  * 분할 방식.
@@ -236,7 +249,44 @@ export const preprocessingSchema = z.looseObject({
   missing: z.enum(MISSING_STRATEGIES),
   scaling: z.enum(SCALING_METHODS),
   categoricalEncoding: z.enum(CATEGORICAL_ENCODINGS),
+  /**
+   * **없으면 `none`이다** — `nSamples`와 같은 방식이다. v3 전 파일은 이상치를 처리한
+   * 적이 없으므로 "없음"이 곧 사실이고, 그래서 v2 → v3 변환이 아무것도 안 바꾼다
+   * (mlpx-spec.md §9.2). 읽는 자리는 `outlierMethodOf`를 지난다.
+   */
+  outliers: z.enum(OUTLIER_METHODS).optional(),
+  /**
+   * `range`가 쓰는 범위. **원본 열 이름 → `{ min?, max? }`**이고 한쪽만 있어도 된다.
+   *
+   * **다른 방식을 골라도 남는다** — 다시 `range`를 고르면 되살아난다. 행을 빼는 것은
+   * `outliers`가 `range`일 때뿐이다 (`ml/ranges.ts`의 `activeRanges`).
+   *
+   * **뒤집힌 범위는 읽는 문에서 거부한다.** 모든 행이 빠지는데, 받아 두면 [학습하기]에서야
+   * `SPLIT_TOO_FEW_ROWS`로 선다 (`nSamplesSchema`와 같은 판단).
+   */
+  ranges: z
+    .record(
+      userString,
+      z
+        .looseObject({ min: z.number().optional(), max: z.number().optional() })
+        .refine(
+          (range) => range.min === undefined || range.max === undefined || range.min <= range.max,
+        ),
+    )
+    .optional(),
 })
+
+/**
+ * 이 설정의 이상치 처리. **필드가 없으면 `none`이다.**
+ *
+ * 한 자리에 두는 이유는 기본값이 둘이 되지 않게 하려는 것이다 — 화면마다 `?? 'none'`을
+ * 적으면 누군가 다른 기본값을 적는다.
+ */
+export function outlierMethodOf(preprocessing: {
+  readonly outliers?: (typeof OUTLIER_METHODS)[number] | undefined
+}): (typeof OUTLIER_METHODS)[number] {
+  return preprocessing.outliers ?? 'none'
+}
 
 export const splitSchema = z.looseObject({
   method: z.enum(SPLIT_METHODS),
@@ -299,6 +349,18 @@ export const tabularSettingsSchema = z.looseObject({
   features: z.array(userString),
   /** 군집화에는 없다. 과제 유형에 따라 선택 항목이다. */
   target: userString.optional(),
+  /**
+   * 학생이 고쳐 부르는 열 이름. **원본 이름 → 부르는 이름**이고, 안 고친 열은 없다
+   * (`data/column-labels.ts`).
+   *
+   * **이 값은 화면에만 닿는다.** 위 `features`·`target`과 `preprocessing`, 그리고 실험
+   * 스냅샷은 전부 **원본 이름**을 키로 들고 있으므로, 여기를 통째로 지워도 프로젝트는
+   * 그대로 학습된다 — 정본 바이트를 안 건드린다는 §1.3의 따름 결과다.
+   *
+   * **선택 항목이다.** 이 필드가 없던 때 저장된 파일이 그대로 열려야 하고, 아직 아무
+   * 이름도 안 고친 프로젝트와 그 파일은 같은 자리다. 그래서 `FORMAT_VERSION`이 안 움직인다.
+   */
+  columnLabels: z.record(userString, userString).optional(),
   preprocessing: preprocessingSchema,
 })
 

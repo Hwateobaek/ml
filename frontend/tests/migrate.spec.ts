@@ -317,6 +317,71 @@ describe('v1 -> v2 백본 id 개정', () => {
  * 값으로는 못 가르므로 **글자로 본다.** `backbones.spec.ts`가 `fetch-backbone.mjs`를
  * 읽는 것과 같은 방식이고, 같은 한계를 갖는다 — 줄이 거기 있는지만 본다.
  */
+/**
+ * v2 -> v3 — 이상치 클리핑 어휘 (mlpx-spec.md §9.2).
+ *
+ * **이 변환은 아무것도 안 바꾸는 것이 옳다.** 지키는 것은 두 가지다 — v2 파일이 열리는가,
+ * 그리고 열렸을 때 **학생이 고른 적 없는 `outliers`가 생기지 않는가.**
+ */
+describe('v2 -> v3 이상치 클리핑 어휘', () => {
+  function tabularV2(): RawDocument {
+    return {
+      ...document,
+      manifest: { ...document.manifest, formatVersion: 2 },
+      runs: {
+        experiments: [
+          {
+            id: 'experiment-1',
+            startedAt: '2026-09-01T09:00:00Z',
+            settings: {
+              taskType: 'classification',
+              runtime: 'mljs',
+              selectedAlgorithms: [{ algorithm: 'decision_tree', runtime: 'mljs' }],
+              data: {
+                features: ['sepal_length'],
+                target: 'species',
+                preprocessing: {
+                  missing: 'drop',
+                  scaling: 'standard',
+                  categoricalEncoding: 'onehot',
+                },
+              },
+              split: { method: 'holdout', testSize: 0.5, stratify: false, randomState: 42 },
+              trainIndices: [0],
+              testIndices: [1],
+            },
+            preprocessor: { format: 'mlpx-preprocess-v1', path: 'model/preprocessor-1.json' },
+            runs: [],
+          },
+        ],
+      },
+    }
+  }
+
+  it('v2 파일이 지금 버전으로 열린다', () => {
+    expect(migrateProjectDocument(tabularV2()).manifest.formatVersion).toBe(FORMAT_VERSION)
+  })
+
+  it('지금 설정에 outliers를 지어내지 않는다', () => {
+    const opened = migrateProjectDocument(tabularV2())
+    const data = opened.settings.data as { preprocessing: Record<string, unknown> }
+    expect('outliers' in data.preprocessing).toBe(false)
+  })
+
+  it('실험 스냅샷에도 지어내지 않는다 - 그 실험은 자르지 않고 학습했다', () => {
+    const opened = migrateProjectDocument(tabularV2())
+    const data = opened.runs.experiments[0]?.settings.data as {
+      preprocessing: Record<string, unknown>
+    }
+    expect('outliers' in data.preprocessing).toBe(false)
+  })
+
+  it('옛 전처리기 형식 이름을 안 고친다 - v1 파일은 v1으로 읽는다', () => {
+    const opened = migrateProjectDocument(tabularV2())
+    expect(opened.runs.experiments[0]?.preprocessor?.format).toBe('mlpx-preprocess-v1')
+  })
+})
+
 describe('마이그레이션은 지금의 등록부에 기대지 않는다', () => {
   const SOURCE = withoutComments(
     readFileSync(join(process.cwd(), 'src', 'project', 'migrate.ts'), 'utf-8'),

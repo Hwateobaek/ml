@@ -40,6 +40,7 @@ export const ROUTE_PROJECT_HOME = 'project'
  */
 const STEP_VIEWS: Readonly<Record<StepId, RouteRecordSingleView['component']>> = {
   data: () => import('@/views/DataView.vue'),
+  visualize: () => import('@/views/VisualizeView.vue'),
   preprocess: () => import('@/views/PreprocessView.vue'),
   train: () => import('@/views/TrainView.vue'),
   results: () => import('@/views/ResultsView.vue'),

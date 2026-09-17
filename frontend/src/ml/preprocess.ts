@@ -20,9 +20,23 @@ import { z } from 'zod'
 
 import { ClientError } from '../errors'
 import type { Preprocessing } from '../project/schema'
+import { clipValue, outlierBounds, type OutlierBounds } from './outliers'
+import { appliedRanges, inRange, type ColumnRanges } from './ranges'
 
-/** 전처리기 형식. .mlpx의 experiment.preprocessor.format에 그대로 들어간다. */
-export const PREPROCESSOR_FORMAT = 'mlpx-preprocess-v1'
+/**
+ * 전처리기 형식. .mlpx의 experiment.preprocessor.format에 그대로 들어간다.
+ *
+ * **v2는 `clip`이 붙은 형식이다** (2026-09-17, mlpx-spec.md §9.2, 코드 소유자가 지시했다).
+ * 이 파서는 모르는 필드를 버리므로, v1 이름으로 경계를 적으면 v1만 아는 해석기가 **자르지
+ * 않은 값으로 예측한다.** 이름이 바뀌어야 그 해석기가 시끄럽게 거부한다.
+ */
+export const PREPROCESSOR_FORMAT = 'mlpx-preprocess-v2'
+
+/**
+ * 읽을 수 있는 형식. **v1도 계속 읽는다** — 이미 나간 파일에 들어 있고, `clip`이 없는
+ * 전처리기는 v2에서도 뜻이 같다 (없으면 안 자른다).
+ */
+export const READABLE_PREPROCESSOR_FORMATS = ['mlpx-preprocess-v1', PREPROCESSOR_FORMAT] as const
 
 /**
  * 열의 자료형. **데이터에서 판정한다.**
@@ -47,6 +61,11 @@ export interface FittedColumn {
   scale?: { center: number; spread: number }
   /** 훈련 데이터에서 본 범주. **순서가 곧 인코딩 순서다.** 범주 열에만 있다. */
   categories?: string[]
+  /**
+   * 이상치 경계. **밖의 값은 경계값으로 바뀐다** (`ml/outliers.ts`). 클리핑을 골랐고, 수치
+   * 열이고, 훈련 데이터의 IQR이 0보다 클 때만 있다 — IQR이 0이면 자르면 열이 한 값이 된다.
+   */
+  clip?: OutlierBounds
 }
 
 export interface Preprocessor {
@@ -214,21 +233,39 @@ export function missingColumns(
  *
  * 타깃이 빈 행은 어떤 결측 전략이든 쓸 수 없다 - 정답을 모르는 행으로는 학습도
  * 채점도 못 한다. 특성의 결측은 전략이 'drop'일 때만 행을 버린다.
+ *
+ * **사람이 정한 범위 밖의 행도 여기서 버린다** (`ml/ranges.ts`). 경계를 데이터에서 구하지
+ * 않으므로 분할 전에 빼도 누수가 없고, 그래서 결측 `drop`과 같은 자리다. 테스트 데이터도
+ * 같은 함수를 지나므로 같은 범위로 빠진다.
+ *
+ * **`ranges`는 필수 인자다.** 선택 인자로 두면 빠뜨린 자리가 조용히 범위를 무시하고, 그건
+ * 화면과 학습이 다른 행을 세는 상태다 (`ml/selection.ts`의 `trainableRowCount`가 같은
+ * 이유로 `nSamples`를 필수로 받는다). 안 거는 판단도 `activeRanges`를 지나 `undefined`로 적는다.
+ * 빈 칸은 범위 검사를 안 받는다 — 빈 칸을 어떻게 할지는 결측치 설정이 정한다.
  */
 export function usableRows(
   dataset: Dataset,
   features: readonly string[],
   target: string | undefined,
   missing: Preprocessing['missing'],
+  ranges: ColumnRanges | undefined,
 ): number[] {
   const indexOf = (name: string): number => dataset.columns.indexOf(name)
   const targetColumn = target === undefined ? -1 : indexOf(target)
   const featureColumns = features.map(indexOf)
+  const bounded = appliedRanges(ranges, features, target)
+    .map(([name, range]) => [indexOf(name), range] as const)
+    .filter(([column]) => column >= 0)
 
   const usable: number[] = []
   dataset.rows.forEach((row, index) => {
     if (targetColumn >= 0 && isMissing(row[targetColumn])) return
     if (missing === 'drop' && featureColumns.some((column) => isMissing(row[column]))) return
+    const outside = bounded.some(([column, range]) => {
+      const value = toNumber(row[column] ?? '')
+      return value !== null && !inRange(value, range)
+    })
+    if (outside) return
     usable.push(index)
   })
   return usable
@@ -266,10 +303,21 @@ export function fitPreprocessor(
       continue
     }
 
-    const numbers = present
+    const raw = present
       .map((cell) => toNumber(cell))
       .filter((value): value is number => value !== null)
     const fitted: FittedColumn = { name, kind }
+
+    /**
+     * **경계는 결측을 뺀 훈련 값으로 구하고, 대체값과 스케일은 자른 뒤의 값으로 구한다**
+     * (open-decisions.md "이상치는 훈련 데이터의 IQR로 클리핑한다", 코드 소유자 결정).
+     * 표준화의 평균·표준편차가 이상치에 끌려가지 않게 하려는 것이 이 기능의 요점이라,
+     * 스케일을 원래 값으로 구하면 자른 의미가 반쯤 사라진다.
+     */
+    const bounds =
+      kind === 'numeric' && preprocessing.outliers === 'clip' ? outlierBounds(raw) : null
+    if (bounds !== null) fitted.clip = { low: bounds.low, high: bounds.high }
+    const numbers = bounds === null ? raw : raw.map((value) => clipValue(value, bounds))
 
     if (preprocessing.missing !== 'drop') {
       fitted.fill = FILL_BY_STRATEGY[preprocessing.missing](numbers, present, kind)
@@ -342,10 +390,19 @@ const fittedColumnSchema = z.looseObject({
   fill: z.union([z.number(), z.string()]).optional(),
   scale: z.looseObject({ center: z.number(), spread: z.number() }).optional(),
   categories: z.array(z.string()).optional(),
+  // **경계가 뒤집힌 파일은 거부한다.** `low > high`면 `clipValue`가 모든 값을 한쪽으로
+  // 밀어 열이 한 값이 되는데, 예외 없이 그럴듯한 예측이 나온다.
+  clip: z
+    .looseObject({ low: z.number(), high: z.number() })
+    .refine((bounds) => bounds.low <= bounds.high)
+    .optional(),
 })
 
 const preprocessorSchema = z.looseObject({
-  format: z.literal(PREPROCESSOR_FORMAT),
+  // **이름 있는 상수를 `z.enum`에 바로 넘기지 않는다.** 그렇게 쓰면
+  // `schema-version.spec.ts`가 이것을 `formatVersion`의 어휘로 훑는데, 이 어휘는 프로젝트
+  // 파일이 아니라 **전처리기 형식 이름이 진다** — 그 검사의 머리말이 밝혀 둔 예외다.
+  format: z.union(READABLE_PREPROCESSOR_FORMATS.map((name) => z.literal(name))),
   columns: z.array(fittedColumnSchema).min(1),
   featureNames: z.array(z.string()).min(1),
   // 없는 것과 비어 있는 것이 같은 뜻이라 기본값을 준다. 옛 파일이나 남이 만든 파일에
@@ -390,6 +447,9 @@ export function parsePreprocessor(value: unknown): Preprocessor {
         ? {}
         : { scale: { center: column.scale.center, spread: column.scale.spread } }),
       ...(column.categories === undefined ? {} : { categories: column.categories }),
+      ...(column.clip === undefined
+        ? {}
+        : { clip: { low: column.clip.low, high: column.clip.high } }),
     })),
     featureNames: parsed.data.featureNames,
     excludedColumns: parsed.data.excludedColumns.map(({ name, reason }) => ({ name, reason })),
@@ -432,12 +492,16 @@ export function transform(
 
     for (const column of preprocessor.columns) {
       const cell = row[columnIndexOf.get(column.name) ?? -1] ?? ''
-      const filled = isMissing(cell) ? (column.fill ?? '') : cell
+      const missing = isMissing(cell)
+      const filled = missing ? (column.fill ?? '') : cell
 
       if (column.kind === 'numeric') {
         // 대체값이 없는데(drop 전략) 결측이면 0으로 둔다. usableRows가 이미
         // 그런 행을 버렸으므로 여기 오는 것은 예측 입력뿐이다.
-        const raw = typeof filled === 'number' ? filled : (toNumber(String(filled)) ?? 0)
+        const read = typeof filled === 'number' ? filled : (toNumber(String(filled)) ?? 0)
+        // **채운 값은 안 자른다.** `0으로 채움`을 고른 학생에게 경계값이 들어가면 그
+        // 설정이 말한 것과 다른 일이 일어난다. 대체값은 이미 자른 값에서 구했다.
+        const raw = missing ? read : clipValue(read, column.clip ?? null)
         values.push(column.scale ? (raw - column.scale.center) / column.scale.spread : raw)
         continue
       }

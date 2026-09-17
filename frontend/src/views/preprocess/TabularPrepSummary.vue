@@ -22,7 +22,7 @@ import { errorMessageKey } from '@/errors'
 import type { RunPlan } from '@/ml/plan'
 import { usesTarget } from '@/ml/selection'
 import { readDataset } from '@/project/dataset'
-import { tabularDataOf } from '@/project/schema'
+import { outlierMethodOf, tabularDataOf } from '@/project/schema'
 import { useProjectStore } from '@/stores/project'
 
 const props = defineProps<{
@@ -144,7 +144,7 @@ const unused = computed(() => {
         </div>
 
         <!--
-          **설정 셋은 언제나 말한다.** 계획이 막혀도 학생이 고른 것은 그대로이고,
+          **설정 넷은 언제나 말한다.** 계획이 막혀도 학생이 고른 것은 그대로이고,
           무엇이 켜져 있는지 모르는 채로 사유만 보는 것이 더 나쁘다.
         -->
         <div class="mt-2 flex justify-between gap-4 border-t border-line pt-2">
@@ -155,6 +155,18 @@ const unused = computed(() => {
           <dt class="font-bold text-ink-soft">{{ t('preprocess.tabular.scaling') }}</dt>
           <dd>{{ t(`scalingMethod.${data.preprocessing.scaling}`) }}</dd>
         </div>
+        <div class="flex justify-between gap-4">
+          <dt class="font-bold text-ink-soft">{{ t('preprocess.tabular.outliers') }}</dt>
+          <dd>{{ t(`outlierMethod.${outlierMethodOf(data.preprocessing)}`) }}</dd>
+        </div>
+        <!--
+          **범위 지정은 테스트 데이터에서도 행을 뺀다.** 점수가 "이 범위의 데이터에 대한
+          모델"의 점수가 된다는 뜻이라, 말하지 않으면 학생은 전체 데이터의 점수로 읽는다
+          (open-decisions.md "사람이 정한 범위로는 행을 뺀다").
+        -->
+        <p v-if="outlierMethodOf(data.preprocessing) === 'range'" class="text-caution">
+          {{ t('preprocess.tabular.rangesNote') }}
+        </p>
         <div class="flex justify-between gap-4">
           <dt class="font-bold text-ink-soft">{{ t('preprocess.tabular.encoding') }}</dt>
           <dd>{{ t(`categoricalEncoding.${data.preprocessing.categoricalEncoding}`) }}</dd>

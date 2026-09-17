@@ -25,6 +25,7 @@ import { supports } from './axes'
 import type { UnavailableReason } from './backend'
 import { targetValues, usableRows, type Dataset } from './preprocess'
 import type { ColumnKind } from './preprocess'
+import { activeRanges, type ColumnRanges } from './ranges'
 
 /**
  * 과제 유형이 타깃 열에 요구하는 자료형. **없으면 요구가 없다.**
@@ -623,7 +624,13 @@ export function stratifyBlock(input: StratifyInput): StratifyBlock | null {
   const column = dataset.columns.indexOf(target)
   if (column < 0) return stratifyBlockFor(input.taskType, [], input.nSamples)
 
-  const rows = usableRows(dataset, input.features, target, input.preprocessing.missing)
+  const rows = usableRows(
+    dataset,
+    input.features,
+    target,
+    input.preprocessing.missing,
+    activeRanges(input.preprocessing),
+  )
   return stratifyBlockFor(input.taskType, targetValues(dataset, rows, target), input.nSamples)
 }
 
@@ -680,13 +687,15 @@ export function trainableRowCount(
   features: readonly string[],
   target: string | undefined,
   missing: Preprocessing['missing'],
+  // **`nSamples`와 같은 이유로 필수다** — 빠뜨리면 화면이 범위로 빠질 행을 센다.
+  ranges: ColumnRanges | undefined,
   nSamples: number | undefined,
 ): number {
   if (!dataset) return 0
   const usable =
     target === undefined
       ? dataset.rows.length
-      : usableRows(dataset, features, target, missing).length
+      : usableRows(dataset, features, target, missing, ranges).length
   return nSamples === undefined ? usable : Math.min(usable, nSamples)
 }
 
@@ -705,7 +714,7 @@ export type RowUsage = {
  * 어긋나지 않는다 - 따로 세면 반드시 어긋난다.
  *
  * **`nSamples`는 일부러 안 센다.** 이 줄이 답하는 질문은 "올린 것 중 몇 행이 **쓸 수
- * 있는** 행인가"이고, 빠진 이유는 결측 하나다. 뽑기는 학생이 그 뒤에 스스로 건 것이라
+ * 있는** 행인가"이고, 빠진 이유는 결측과 사람이 정한 범위다. 뽑기는 학생이 그 뒤에 스스로 건 것이라
  * 다른 사실이고, **화면에서도 다른 줄이 말한다**(`architecture.md` §8.9). 둘을 한 숫자로
  * 뭉치면 "50행이 빠졌습니다"가 결측인지 안 뽑힌 것인지 구분이 안 된다.
  */
@@ -714,9 +723,10 @@ export function rowUsage(
   features: readonly string[],
   target: string | undefined,
   missing: Preprocessing['missing'],
+  ranges: ColumnRanges | undefined,
 ): RowUsage | null {
   if (!dataset || target === undefined) return null
-  const usable = trainableRowCount(dataset, features, target, missing, undefined)
+  const usable = trainableRowCount(dataset, features, target, missing, ranges, undefined)
   const dropped = dataset.rows.length - usable
   return dropped > 0 ? { total: dataset.rows.length, usable, dropped } : null
 }

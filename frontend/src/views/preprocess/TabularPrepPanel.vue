@@ -21,11 +21,15 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useColumnLabels } from '@/composables/useColumnLabels'
+
 import TermPopover from '@/components/TermPopover.vue'
 import AppButton from '@/components/AppButton.vue'
 import AppDialog from '@/components/AppDialog.vue'
 import { useRadioGroupGuard } from '@/composables/useRadioGroupGuard'
 import { summarizeColumns } from '@/data/columns'
+import { outlierCounts, rangeGuide } from '@/data/visualize'
+import { activeRanges, withColumnRange, type ColumnRange } from '@/ml/ranges'
 import { importTable, openTable, TABULAR_ACCEPT, type TableDocument } from '@/data/table'
 import { MIN_SPLIT_ROWS } from '@/limits'
 import {
@@ -36,6 +40,7 @@ import {
   stratifyBlock,
   stratifyLocked,
   trainableRowCount,
+  usesTarget,
 } from '@/ml/selection'
 import { planRun } from '@/ml/plan'
 import { preprocessPreview } from '@/ml/preview'
@@ -48,8 +53,10 @@ import {
 import {
   CATEGORICAL_ENCODINGS,
   MISSING_STRATEGIES,
+  OUTLIER_METHODS,
   SCALING_METHODS,
   dataSettings,
+  outlierMethodOf,
   tabularDataOf,
   type Preprocessing,
   type ProjectDocument,
@@ -64,10 +71,13 @@ import {
 import { useProjectStore } from '@/stores/project'
 import { useToastStore } from '@/stores/toasts'
 import ColumnPicker from './ColumnPicker.vue'
+import RangeEditor from './RangeEditor.vue'
 import TabularPrepSummary from './TabularPrepSummary.vue'
 import TabularPrepPreview from './TabularPrepPreview.vue'
 
 const { t } = useI18n()
+/** 화면에 찍는 열 이름. 계산은 원본 이름을 그대로 쓴다 (`data/column-labels.ts`). */
+const { labels: columnLabels } = useColumnLabels()
 const project = useProjectStore()
 const toasts = useToastStore()
 
@@ -83,10 +93,65 @@ const data = computed(() => tabularDataOf(project.file?.document))
 const dataset = computed(() => readDataset(project.file))
 const columns = computed(() => (dataset.value ? summarizeColumns(dataset.value) : []))
 
+/**
+ * 열마다 이상치 개수. **전체 데이터로 센다** — 옆의 `결측치 수`와 같은 자리다. 클리핑이
+ * 실제로 쓰는 경계는 훈련 데이터로 구하고, 그 값은 열 표의 `전처리` 칸이 말한다
+ * (open-decisions.md "이상치는 훈련 데이터의 IQR로 클리핑한다").
+ *
+ * **타깃 열도 센다.** 보여주기만 하고 자르지는 않는다 — `fitPreprocessor`는 특성만 돈다.
+ */
+const outliers = computed(() => {
+  const table = dataset.value
+  if (!table) return new Map<string, number>()
+  const numeric = columns.value.filter((column) => column.kind === 'numeric')
+  return outlierCounts(
+    table,
+    numeric.map((column) => column.name),
+  )
+})
+
+/**
+ * 범위를 정할 수 있는 열 — **지금 쓰는 숫자 열뿐이다.** 타깃이 먼저, 그다음 특성 순서다.
+ *
+ * 특성에서 뺀 열은 범위를 적어도 행을 안 빼므로(`appliedRanges`) 칸을 안 보인다. 타깃은
+ * 그 유형이 타깃을 쓸 때만 넣는다 — 판정은 `usesTarget` 하나다 (§8.10).
+ */
+const rangeColumns = computed(() => {
+  const current = data.value
+  const table = dataset.value
+  if (!current || !table) return []
+  const numeric = new Set(
+    columns.value.filter((column) => column.kind === 'numeric').map((column) => column.name),
+  )
+  const target =
+    usesTarget(project.taskType) && current.target !== undefined ? [current.target] : []
+  return [...new Set([...target, ...current.features])]
+    .filter((name) => numeric.has(name))
+    .map((name) => ({ name, guide: rangeGuide(table, name) }))
+})
+
+/** 열 하나의 범위를 바꾼다. 비우면 항목이 사라진다 (`withColumnRange`). */
+function setRange(column: string, range: ColumnRange): void {
+  const current = data.value
+  if (!current) return
+  setCleaning({ ranges: withColumnRange(current.preprocessing.ranges, column, range) })
+}
+
+/** 지금 고른 이상치 처리. 필드가 없는 프로젝트는 `none`이다 (`outlierMethodOf`). */
+const outlierMethod = computed(() =>
+  data.value ? outlierMethodOf(data.value.preprocessing) : 'none',
+)
+
 const trainRowUsage = computed(() => {
   const current = data.value
   if (!current) return null
-  return rowUsage(dataset.value, current.features, current.target, current.preprocessing.missing)
+  return rowUsage(
+    dataset.value,
+    current.features,
+    current.target,
+    current.preprocessing.missing,
+    activeRanges(current.preprocessing),
+  )
 })
 
 /**
@@ -251,6 +316,7 @@ const usableRowCount = computed(() =>
     data.value?.features ?? [],
     data.value?.target,
     data.value?.preprocessing.missing ?? 'drop',
+    data.value ? activeRanges(data.value.preprocessing) : undefined,
     undefined,
   ),
 )
@@ -281,6 +347,7 @@ const sampleSummary = computed(() => {
     data.value?.features ?? [],
     data.value?.target,
     data.value?.preprocessing.missing ?? 'drop',
+    data.value ? activeRanges(data.value.preprocessing) : undefined,
     chosen,
   )
   return { usable, used, rest: Math.max(usable - used, 0) }
@@ -395,6 +462,7 @@ const testRowUsage = computed(() => {
     current.features,
     current.target,
     current.preprocessing.missing,
+    activeRanges(current.preprocessing),
   )
 })
 
@@ -586,6 +654,13 @@ const encodingHelp = computed(() =>
     body: t(`encodingHelp.${encoding}`),
   })),
 )
+
+const outlierHelp = computed(() =>
+  OUTLIER_METHODS.map((method) => ({
+    term: t(`outlierMethod.${method}`),
+    body: t(`outlierHelp.${method}`),
+  })),
+)
 </script>
 
 <template>
@@ -621,6 +696,9 @@ const encodingHelp = computed(() =>
           :fitted="fittedColumns"
           :scaling="data.preprocessing.scaling"
           :encoding="data.preprocessing.categoricalEncoding"
+          :labels="columnLabels"
+          :outliers="outliers"
+          :outlier-method="outlierMethod"
           @pick-target="pickTarget"
           @toggle-feature="toggleFeature"
           @set-all-features="setAllFeatures"
@@ -960,6 +1038,50 @@ const encodingHelp = computed(() =>
             </div>
           </div>
 
+          <!--
+            **스케일링 바로 아래다.** 클리핑이 스케일 기준을 바꾸기 때문이다 — 자른 뒤의
+            값으로 평균과 표준편차를 구한다 (open-decisions.md "이상치는 훈련 데이터의
+            IQR로 클리핑한다"). 둘을 떨어뜨려 두면 그 관계가 화면에서 안 보인다.
+          -->
+          <div>
+            <h3 class="font-bold text-ink-soft">
+              <TermPopover
+                :title="t('preprocess.tabular.outliers')"
+                :body="t('preprocess.tabular.outliersSummary')"
+                :items="outlierHelp"
+                side="bottom"
+              />
+            </h3>
+            <div class="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
+              <label
+                v-for="method in OUTLIER_METHODS"
+                :key="method"
+                class="flex cursor-pointer items-center gap-2"
+              >
+                <input
+                  type="radio"
+                  name="outliers"
+                  class="size-4 accent-brand"
+                  :checked="outlierMethod === method"
+                  @change="setCleaning({ outliers: method })"
+                />
+                {{ t(`outlierMethod.${method}`) }}
+              </label>
+            </div>
+            <!--
+              **고른 동안만 펼친다.** 다른 방식을 골라도 적어 둔 숫자는 파일에 남는다 —
+              다시 고르면 되살아난다 (`ml/ranges.ts`의 `activeRanges`).
+            -->
+            <RangeEditor
+              v-if="outlierMethod === 'range'"
+              class="mt-3"
+              :columns="rangeColumns"
+              :ranges="data.preprocessing.ranges"
+              :labels="columnLabels"
+              @set="setRange"
+            />
+          </div>
+
           <div>
             <h3 class="font-bold text-ink-soft">
               <TermPopover
@@ -1009,7 +1131,7 @@ const encodingHelp = computed(() =>
       숫자로 말한 것을 표로 확인하는 순서다 — 반대로 두면 학생이 표를 먼저 읽고 나서
       "그래서 몇 행이 남았지"를 다시 찾는다.
     -->
-    <TabularPrepPreview :preview="preview" :empty-key="previewEmptyKey" />
+    <TabularPrepPreview :preview="preview" :empty-key="previewEmptyKey" :labels="columnLabels" />
   </div>
 
   <!--

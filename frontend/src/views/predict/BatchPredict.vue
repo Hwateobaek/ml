@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 
 import AppBadge from '@/components/AppBadge.vue'
 import AppButton from '@/components/AppButton.vue'
+import { useColumnLabels } from '@/composables/useColumnLabels'
 import AppTable from '@/components/AppTable.vue'
 import { useFormat } from '@/composables/useFormat'
 import { errorMessageKey, type ClientErrorCode } from '@/errors'
@@ -70,6 +71,8 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+/** 화면에 찍는 열 이름. 원본 이름은 계산이 그대로 쓴다 (data/column-labels.ts). */
+const { label } = useColumnLabels()
 const format = useFormat()
 const project = useProjectStore()
 const toasts = useToastStore()
@@ -720,7 +723,7 @@ defineExpose({
             <th class="min-w-20">{{ t('predict.tabular.rowNumber') }}</th>
             <template v-if="showFeatures">
               <th v-for="field in props.fields" :key="field.name" class="min-w-32">
-                {{ field.name }}
+                {{ label(field.name) }}
               </th>
             </template>
             <th v-for="(model, index) in props.models" :key="model.run.id" class="min-w-40">

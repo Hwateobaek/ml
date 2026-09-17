@@ -17,6 +17,7 @@
 
 import { useI18n } from 'vue-i18n'
 
+import { useColumnLabels } from '@/composables/useColumnLabels'
 import AppField from '@/components/AppField.vue'
 import { useFormat } from '@/composables/useFormat'
 import type { PredictionField } from '@/ml/predict'
@@ -48,6 +49,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+/** 화면에 찍는 열 이름. 원본 이름은 계산이 그대로 쓴다 (data/column-labels.ts). */
+const { label } = useColumnLabels()
 const format = useFormat()
 
 /**
@@ -95,7 +98,7 @@ function hintOf(field: PredictionField): string | undefined {
       <AppField
         v-for="field in props.fields"
         :key="field.name"
-        :label="field.name"
+        :label="label(field.name)"
         :hint="hintOf(field)"
       >
         <template #default="control">

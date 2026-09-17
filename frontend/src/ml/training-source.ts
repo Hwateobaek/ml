@@ -23,6 +23,7 @@ import { trainableRowCount } from '@/ml/selection'
 import { readDataset, readTestDataset } from '@/project/dataset'
 import { addEmbeddings, readEmbeddings } from '@/project/embeddings'
 import { IMAGE_UNLABELED, type ProjectFile } from '@/project/format'
+import { activeRanges } from '@/ml/ranges'
 import { labeledCategoryCount, readImages } from '@/project/images'
 import {
   dataSettings,
@@ -254,6 +255,7 @@ export const TRAINING_ROW_COUNTS: Readonly<
       data.features,
       data.target,
       data.preprocessing.missing,
+      activeRanges(data.preprocessing),
       project.document.settings.nSamples,
     )
   },

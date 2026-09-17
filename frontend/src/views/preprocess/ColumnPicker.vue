@@ -18,9 +18,12 @@ import AppButton from '@/components/AppButton.vue'
 import AppTable from '@/components/AppTable.vue'
 import TermPopover from '@/components/TermPopover.vue'
 import { useFormat } from '@/composables/useFormat'
+import { columnLabel, type ColumnLabels } from '@/data/column-labels'
 import type { FittedColumn } from '@/ml/preprocess'
 import { columnBlocks, columnNote, featureLocked, type ColumnPlan } from '@/ml/selection'
-import type { Preprocessing } from '@/project/schema'
+import type { OUTLIER_METHODS, Preprocessing } from '@/project/schema'
+
+type OutlierMethod = (typeof OUTLIER_METHODS)[number]
 
 const props = defineProps<{
   plan: ColumnPlan
@@ -56,6 +59,25 @@ const props = defineProps<{
    * (`fitPreprocessor`의 `excludedColumns`), 그 사실은 줄의 사유가 따로 말한다.
    */
   encoding: Preprocessing['categoricalEncoding']
+  /**
+   * 학생이 고쳐 부르는 열 이름. **판이 내려준다** — 이 표는 단독으로 마운트해 검사하는
+   * 것이라(`tests/column-picker.spec.ts`) 전역 상태에 닿으면 그 검사가 못 돈다.
+   *
+   * **올려 보내는 이름은 그대로 원본이다** — 아래 `emit`이 넘기는 것은 전부
+   * `column.summary.name`이고, 그것이 타깃·특성이 쓰는 키다.
+   */
+  labels?: ColumnLabels | undefined
+  /**
+   * 열마다 이상치 개수. **전체 데이터로 센 것이고 판이 내려준다** (`data/visualize.ts`의
+   * `outlierCounts`). 목록에 없는 열은 숫자가 없는 열이라 수 대신 빈 표시를 찍는다.
+   */
+  outliers?: ReadonlyMap<string, number> | undefined
+  /**
+   * 고른 이상치 처리. **`전처리` 칸이 "왜 안 잘랐는지"를 말하려면 필요하다** — `fitted`에
+   * `clip`이 없는 것만으로는 클리핑을 안 골랐는지, 사분위 범위가 0이라 못 잘랐는지 갈리지
+   * 않는다. `scaling`·`encoding`을 받는 것과 같은 이유다.
+   */
+  outlierMethod?: OutlierMethod | undefined
 }>()
 
 const emit = defineEmits<{
@@ -67,6 +89,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const format = useFormat()
 
+const label = (name: string): string => columnLabel(name, props.labels)
+
 /**
  * 이 열에 실제로 무슨 일이 일어나는가. **결측이 없으면 채움값을 말하지 않는다** —
  * 채울 것이 없는데 값을 보여주면 그 열에도 빈 칸이 있는 것처럼 읽힌다.
@@ -75,6 +99,23 @@ function effectOf(column: ColumnPlan['columns'][number]): string[] {
   const fitted = props.fitted?.get(column.summary.name)
   if (!fitted) return []
   const parts: string[] = []
+  /**
+   * **클리핑이 스케일보다 먼저 적힌다.** 실제 순서가 그렇다 — 자른 값으로 스케일 기준을
+   * 구한다 (`fitPreprocessor`). 경계는 훈련 데이터의 것이라 `outlierBasis.clip` 문장이
+   * 그렇게 밝힌다.
+   */
+  if (fitted.clip) {
+    parts.push(
+      t('outlierBasis.clip', {
+        low: format.stat(fitted.clip.low),
+        high: format.stat(fitted.clip.high),
+      }),
+    )
+  } else if (props.outlierMethod === 'clip' && fitted.kind === 'numeric') {
+    // 골랐는데 경계가 없으면 사분위 범위가 0이었다 (`ml/outliers.ts`의 `outlierBounds`).
+    // 말하지 않으면 학생은 이 열도 잘렸다고 믿는다.
+    parts.push(t('outlierBasis.flat'))
+  }
   if (fitted.fill !== undefined && column.summary.missing > 0) {
     parts.push(
       t('preprocess.tabular.fillWith', {
@@ -135,6 +176,15 @@ function noteOf(column: ColumnPlan['columns'][number]): string | null {
  */
 function toneOf(column: ColumnPlan['columns'][number]): string {
   return columnBlocks(column) ? 'text-danger' : 'text-caution'
+}
+
+/**
+ * 이상치 칸의 글자. **숫자가 없는 열은 0이 아니라 빈 표시다** — 범주형 열에 `0`을 찍으면
+ * "이상치가 없다"로 읽히는데, 실제로는 셀 수 없는 열이다.
+ */
+function outlierText(name: string): string {
+  const count = props.outliers?.get(name)
+  return count === undefined ? '–' : String(count)
 }
 
 function onFeature(name: string, event: Event): void {
@@ -203,6 +253,13 @@ function onFeature(name: string, event: Event): void {
           <th>
             <TermPopover :title="t('data.tabular.missing')" :body="t('columnHelp.missing')" />
           </th>
+          <!--
+            **결측치 수 바로 옆이다.** 둘 다 [데이터 정제]에서 다루는 것이고, 둘 다 전체
+            데이터로 센 수다.
+          -->
+          <th>
+            <TermPopover :title="t('data.tabular.outliers')" :body="t('columnHelp.outliers')" />
+          </th>
           <th>
             <TermPopover :title="t('data.tabular.unique')" :body="t('columnHelp.unique')" />
           </th>
@@ -226,7 +283,7 @@ function onFeature(name: string, event: Event): void {
               type="radio"
               class="size-4 accent-brand"
               :checked="column.role === 'target'"
-              :aria-label="column.summary.name"
+              :aria-label="label(column.summary.name)"
               @change="emit('pickTarget', column.summary.name)"
             />
           </td>
@@ -236,18 +293,19 @@ function onFeature(name: string, event: Event): void {
               class="size-4 accent-brand"
               :checked="column.role === 'feature'"
               :disabled="featureLocked(column)"
-              :aria-label="column.summary.name"
+              :aria-label="label(column.summary.name)"
               @change="onFeature(column.summary.name, $event)"
             />
           </td>
           <td class="w-full">
-            <span class="block font-bold text-ink">{{ column.summary.name }}</span>
+            <span class="block font-bold text-ink">{{ label(column.summary.name) }}</span>
             <span v-if="noteOf(column)" class="block" :class="toneOf(column)">
               {{ noteOf(column) }}
             </span>
           </td>
           <td class="whitespace-nowrap">{{ t(`columnKind.${column.summary.kind}`) }}</td>
           <td class="whitespace-nowrap">{{ column.summary.missing }}</td>
+          <td class="whitespace-nowrap">{{ outlierText(column.summary.name) }}</td>
           <td class="whitespace-nowrap">{{ column.summary.unique }}</td>
           <td class="whitespace-nowrap text-ink-soft">
             <span v-for="part in effectOf(column)" :key="part" class="block">{{ part }}</span>

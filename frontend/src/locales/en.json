@@ -64,6 +64,39 @@
     "exportWarning": "Everything you have done so far is held only on this computer, temporarily, and can disappear. Saving to a file keeps it, and lets you open it on another computer and carry on.",
     "keepFile": "Please keep the saved file somewhere safe, such as a USB drive or cloud storage, or hand it in."
   },
+  "visualize": {
+    "emptyReason": "No data yet.",
+    "emptyNext": "Load a file in the Data step and you can explore it with charts here.",
+    "noNumericReason": "There is not a single numeric column.",
+    "noNumericNext": "Charts are drawn from numeric columns. Please check what columns you have in the Data step.",
+    "column": "Column",
+    "distribution": "Distribution",
+    "distributionLead": "See which ranges the values of one column fall into. A taller bar means more rows in that range.",
+    "binRange": "{start} to {end}",
+    "binCount": "{count} row | {count} rows",
+    "min": "Minimum",
+    "q1": "1st quartile",
+    "median": "Median",
+    "q3": "3rd quartile",
+    "max": "Maximum",
+    "boxPlot": "Box plot",
+    "boxPlotLead": "The box holds the middle half of the values, and each dot outside it is an outlier.",
+    "outlierBounds": "Outlier bounds",
+    "outlierBoundsValue": "{low} to {high}",
+    "outlierBoundsFlat": "Not set because the IQR is 0",
+    "outlierCount": "Outliers",
+    "scatter": "Scatter plot",
+    "scatterLead": "Each dot is one row of data. See whether two columns move together, and whether groups separate.",
+    "scatterNeedsTwo": "A scatter plot and correlations need at least two numeric columns. (now {count})",
+    "axisX": "X axis",
+    "axisY": "Y axis",
+    "groupBy": "Color by",
+    "groupNone": "No grouping",
+    "allRows": "All rows",
+    "point": "{name} (x {x}, y {y})",
+    "correlation": "Correlation",
+    "correlationLead": "How much two columns move together. Near 1 they grow together, near -1 they move in opposite directions, and near 0 there is little relationship."
+  },
   "steps": {
     "data": {
       "label": "Data",
@@ -73,6 +106,11 @@
       "image": {
         "purpose": "Add the photos you want to train with."
       }
+    },
+    "visualize": {
+      "label": "Visualize",
+      "locked": "Load your data first.",
+      "purpose": "See how each column is spread out and how columns relate to one another. This is where you look at your data before deciding what to predict."
     },
     "preprocess": {
       "label": "Pre­pro­cess­ing",
@@ -154,6 +192,15 @@
       "change": "Replace the data",
       "choose": "Choose a file",
       "columnName": "Column",
+      "outliers": "Outliers",
+      "renameLabel": "What to call this column (original: {name})",
+      "renameDuplicate": "Another column already goes by that name.",
+      "viewAll": "View all data",
+      "fullDataTitle": "All data",
+      "fullDataDescription": "{rows} rows · {columnCount} columns",
+      "fullDataRange": "Rows {first} to {last} of {total}",
+      "rowNumber": "Row",
+      "pageOf": "{page} / {last}",
       "dropHint": "Drop a CSV or Excel file here, or use [Choose a file].",
       "droppedColumns": "Some chosen columns are not in the new data, so they were dropped. Choose them again in the preprocessing step. ({names})",
       "emptyReason": "No data yet.",
@@ -248,6 +295,20 @@
     "minmax": "Maps values into 0 to 1 using the smallest and largest value. Good when the range is fixed, but one unusual value squashes the rest.",
     "robust": "Uses the median and the interquartile range. Unusually large or small values move it less."
   },
+  "outlierMethod": {
+    "none": "None",
+    "clip": "Clipping",
+    "range": "Custom range"
+  },
+  "outlierHelp": {
+    "none": "Outliers go into training as they are.",
+    "clip": "Values below Q1 − 1.5×IQR or above Q3 + 1.5×IQR in the training data are replaced by the nearest bound. The same bounds apply to the test data and to values you enter when predicting. Values that filled a blank are not changed.",
+    "range": "Set a minimum and maximum for each column yourself. Rows with a value outside that range are left out of both training and testing. The bounds themselves count as inside. Blank cells follow the missing-value setting."
+  },
+  "outlierBasis": {
+    "clip": "Clipping → training data {low} to {high}",
+    "flat": "No clipping → the IQR is 0"
+  },
   "encodingBasis": {
     "onehot": "One-hot encoding → {count} column | One-hot encoding → {count} columns",
     "ordinal": "Ordinal encoding → 0 to {last}"
@@ -275,6 +336,7 @@
     "previewTitle": "Preprocessing preview",
     "previewValueCode": "As a number",
     "previewValueRaw": "Used as is",
+    "previewValueClipped": "Clipped",
     "previewValueScaled": "Scaled",
     "randomState": "Random seed",
     "randomStateNote": "Every random choice made with your data uses this value. Keeping it fixed means every training run works with the same data, so a change in your score can be traced to the model setting you changed.",
@@ -298,6 +360,20 @@
       "missing": "Missing value handling",
       "missingNote": "Text columns have no mean or median, so the most common value fills them.",
       "missingSummary": "Decides what to do with blank cells.",
+      "outliers": "Outlier handling",
+      "outliersSummary": "Decides what to do with values far outside the usual range. Clipping takes its bounds from the quartiles of the training data; a custom range uses the bounds you enter.",
+      "ranges": "Ranges to use",
+      "rangesLead": "A side left blank has no limit. Only numeric columns among the target and features you chose are listed.",
+      "rangesEmpty": "Choose a numeric column as the target or a feature and you can set its range.",
+      "rangesNote": "Rows outside the range are left out of both the training data and the test data.",
+      "rangeMin": "Minimum",
+      "rangeMax": "Maximum",
+      "rangeMinLabel": "Minimum ({name})",
+      "rangeMaxLabel": "Maximum ({name})",
+      "rangeGuide": "Data {min} to {max} · IQR bounds {low} to {high}",
+      "rangeGuideFlat": "Data {min} to {max} · the IQR is 0",
+      "rangeReversed": "The minimum is larger than the maximum. That would leave out every row, so it was not saved.",
+      "rangeNotNumber": "Please enter a number. This value was not saved.",
       "noFeatureChosen": "No feature chosen yet.",
       "noUsableFeature": "No feature goes into training at all.",
       "notEncodable": "This column holds text, so your current settings leave it out of training.",
@@ -743,6 +819,7 @@
     "feature": "A column the model uses as evidence. You can pick several, and columns you leave unpicked are not used in training. For example, to guess exam scores you might pick study hours and attendance.",
     "kind": "Whether this column reads as Numeric or Categorical. Numeric columns go through scaling, categorical ones through encoding. Some columns are written as numbers but have no size meaning, such as a grade level or a postal code, so it is worth checking with your own eyes.",
     "missing": "How many rows have no value here. Empty boxes must be either filled in or dropped before training, and you choose which in [Tidy the data] below.",
+    "outliers": "How many values in the whole data set are below Q1 − 1.5×IQR or above Q3 + 1.5×IQR. Counted for numeric columns only. Clipping takes its bounds from the training data alone, so the number of values it actually changes can differ a little.",
     "unique": "How many different values this column holds. A column with only one value cannot tell anything apart, and a categorical column adds one encoded column per value, so many values means many columns.",
     "effect": "What actually happens to this column with the current settings. Filled-in values and scaling are worked out from the training data only, so these numbers are not the whole column."
   },

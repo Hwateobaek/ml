@@ -36,6 +36,7 @@ import {
   type Dataset,
   type Preprocessor,
 } from './preprocess'
+import { activeRanges } from './ranges'
 import { sampleRows } from './sample'
 // 전처리 화면이 [학습하기] 전에 같은 판정을 한다. 표가 두 벌이면 화면과 학습이 갈린다.
 import { requiredTargetKind, stratifyApplies } from './selection'
@@ -125,7 +126,13 @@ export function planRun(input: PlanInput): RunPlan {
   // 군집화에는 테스트 데이터셋이 없다 — 전체 데이터로 학습한다.
   const testFromProvided = !isClustering && settings.split.method === 'provided' && !!testDataset
   const providedTestRows = testFromProvided
-    ? usableRows(testDataset!, data.features, target!, data.preprocessing.missing)
+    ? usableRows(
+        testDataset!,
+        data.features,
+        target!,
+        data.preprocessing.missing,
+        activeRanges(data.preprocessing),
+      )
     : undefined
 
   // 군집화에는 타깃이 없으므로 usableRows에 undefined를 넘긴다. usableRows는
@@ -135,6 +142,7 @@ export function planRun(input: PlanInput): RunPlan {
     data.features,
     isClustering ? undefined : target,
     data.preprocessing.missing,
+    activeRanges(data.preprocessing),
   )
   const usableLabels = isClustering ? [] : targetValues(dataset, usable, target!)
 

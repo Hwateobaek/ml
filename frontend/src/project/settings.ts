@@ -80,6 +80,22 @@ export function withTaskType(
 }
 
 /**
+ * 열 하나를 뭐라고 부를지 정한다. **부르는 이름만 바뀐다.**
+ *
+ * 같이 갈아 끼우는 것이 하나도 없는 유일한 `with*`다 — 위 `withTarget`이 특성을 함께
+ * 손보는 것과 갈라지는 자리이고, 그것이 이 기능의 요점이다. 타깃·특성·전처리는 전부
+ * **원본 이름**을 키로 들고 있으므로 (`data/column-labels.ts`) 이름을 고쳐도 고른 것이
+ * 안 풀린다.
+ */
+export function withColumnLabels(
+  document: ProjectDocument,
+  columnLabels: Readonly<Record<string, string>>,
+  now: string,
+): ProjectDocument {
+  return withTabularData(document, { columnLabels }, now)
+}
+
+/**
  * 타깃 열을 정한다. `undefined`면 고르지 않은 상태로 되돌린다.
  *
  * **고른 열은 특성에서 빠진다.** 정답을 문제에 함께 넣으면 어떤 모델이든 정확도가

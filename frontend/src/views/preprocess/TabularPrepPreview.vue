@@ -16,11 +16,18 @@ import { useI18n } from 'vue-i18n'
 import AppTable from '@/components/AppTable.vue'
 import TermPopover from '@/components/TermPopover.vue'
 import { useFormat } from '@/composables/useFormat'
+import { columnLabel, type ColumnLabels } from '@/data/column-labels'
 import type { PreprocessPreview } from '@/ml/preview'
 
 const props = defineProps<{
   /** 판이 한 번만 지어서 내려준다. 계획이 못 섰으면 `null`이다. */
   preview: PreprocessPreview | null
+  /**
+   * 학생이 고쳐 부르는 열 이름. **스토어에서 안 읽고 판이 내려준다** — 이 부품은
+   * 단독으로 마운트해 검사하는 것이라(`tests/prep-preview-table.spec.ts`) 전역 상태에
+   * 닿는 순간 그 검사가 Pinia 없이는 못 돈다. 안 주면 원본 이름 그대로다.
+   */
+  labels?: ColumnLabels | undefined
   /**
    * 비었을 때 무엇을 말할지. **판이 정한다** — 왜 비었는지는 계획이 알고 화면은 모른다.
    * 요약 카드가 세 상태를 갖는 것과 같은 사정이다 (R11 감사 B-1).
@@ -30,6 +37,8 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const format = useFormat()
+
+const label = (name: string): string => columnLabel(name, props.labels)
 
 /**
  * 이 열이 표에서 차지하는 칸 수. **원래 값 한 칸에 특성만큼 더한다.**
@@ -60,6 +69,7 @@ const VALUE_KIND_KEYS: Readonly<
   Record<PreprocessPreview['columns'][number]['features'][number]['kind'], string>
 > = {
   raw: 'preprocess.previewValueRaw',
+  clipped: 'preprocess.previewValueClipped',
   scaled: 'preprocess.previewValueScaled',
   code: 'preprocess.previewValueCode',
 }
@@ -85,6 +95,9 @@ function cellText(
 ): string {
   if (feature.kind === 'code') return String(value)
   if (feature.kind === 'scaled' || before.trim() === '') return format.stat(value)
+  // **클리핑 열도 안 잘린 칸은 원문 글자다.** 경계 안의 값은 그대로 지나갔으므로
+  // `rawCell`이고, 경계값으로 바뀐 칸만 훈련 데이터 통계라 `stat`이다.
+  if (feature.kind === 'clipped' && Number(before) !== value) return format.stat(value)
   return format.rawCell(value)
 }
 </script>
@@ -137,7 +150,7 @@ function cellText(
               (`문자 값이 든 열이라 …`)과 같은 색으로 둔다.
             -->
             <span class="flex flex-wrap items-baseline gap-x-2">
-              {{ column.name }}
+              {{ label(column.name) }}
               <span v-if="column.excluded" class="font-normal text-caution">
                 {{ t('preprocess.previewExcluded') }}
               </span>

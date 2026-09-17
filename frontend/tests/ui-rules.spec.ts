@@ -1758,6 +1758,11 @@ describe('전처리 판은 붙일 때도 뗄 때도 묻는다', () => {
    * (`ImagePrepPanel`의 붙이기 경로) 실패를 안 잡는 것도 있다. 그래서 목록을 자동으로
    * 만들지 않고 **이름을 못 박아** 판단을 부른다. 늘었으면 그 화면이 `CLOSERS`에
    * 들어가는지 보고, 아니면 왜 아닌지를 이 주석에 적어라.
+   *
+   * **`data/FullDataDialog.vue`는 `CLOSERS`에 안 들어간다** (2026-09-10). 위 목록이
+   * 지키는 것은 *"묻고 나서 실패했을 때 창이 닫히는가"*인데, 이 창은 **묻지 않고
+   * 실패하지도 않는다** — 이미 확정된 표를 쪽으로 나눠 보여주기만 하므로 프로젝트를
+   * 건드리는 경로도, 잡을 예외도, 사라질 실험도 없다.
    */
   it('AppDialog를 쓰는 화면이 그대로다 - 늘었으면 CLOSERS를 다시 보라', () => {
     const screens = vueFiles(SRC)
@@ -1770,6 +1775,7 @@ describe('전처리 판은 붙일 때도 뗄 때도 묻는다', () => {
       'views/PreprocessView.vue',
       'views/TrainView.vue',
       'views/WelcomeView.vue',
+      'views/data/FullDataDialog.vue',
       'views/data/ImagePanel.vue',
       'views/data/TabularPanel.vue',
       'views/predict/ImagePredictPanel.vue',

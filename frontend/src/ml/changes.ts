@@ -221,6 +221,13 @@ const LABELS: Readonly<Record<string, { readonly labelKey: string; readonly desc
       labelKey: 'preprocess.tabular.encoding',
       describe: vocabulary('categoricalEncoding'),
     },
+    'preprocessing.outliers': {
+      labelKey: 'preprocess.tabular.outliers',
+      describe: vocabulary('outlierMethod'),
+    },
+    // 견줄 때 `Body Mass (g) [3000, 5000]` 꼴의 목록으로 편다 (`ml/experiment.ts`의
+    // `withOutlierDefault`). 특성처럼 줄에는 개수를, 누르면 범위를 보인다.
+    'preprocessing.ranges': { labelKey: 'preprocess.tabular.ranges', describe: listOf },
     'split.method': { labelKey: 'preprocess.testDataTitle', describe: vocabulary('splitMethod') },
     'split.testSize': { labelKey: 'preprocess.testSize', describe: ratio },
     'split.stratify': { labelKey: 'preprocess.stratify', describe: onOff },

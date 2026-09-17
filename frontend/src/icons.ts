@@ -14,6 +14,7 @@
 
 import {
   ChartColumn,
+  ChartScatter,
   Check,
   Circle,
   ChevronDown,
@@ -54,6 +55,7 @@ export const HOME_ICON: LucideIcon = LayoutDashboard
 /** 워크플로 단계의 그림. 레일과 상태 팝오버가 같은 것을 쓴다. */
 export const STEP_ICONS: Readonly<Record<StepId, LucideIcon>> = {
   data: Table2,
+  visualize: ChartScatter,
   preprocess: SlidersHorizontal,
   train: FlaskConical,
   results: ChartColumn,

@@ -1,0 +1,198 @@
+/**
+ * `data/visualize.ts`의 계산.
+ *
+ * **눈으로는 안 보이는 것만 여기서 지킨다** — 구간 경계에 걸친 값이 어느 칸에 드는지,
+ * 결측이 있는 열에서 행이 어긋나지 않는지, 상수 열에서 NaN이 새지 않는지. 셋 다 화면에
+ * 그려 놓으면 그럴듯해 보이고, 틀린 줄은 한참 뒤에 안다.
+ */
+
+import { describe, expect, it } from 'vitest'
+
+import {
+  boxPlot,
+  correlation,
+  correlationMatrix,
+  fiveNumbers,
+  histogram,
+  numericPairs,
+  numericValues,
+  outlierCounts,
+} from '@/data/visualize'
+import { OUTLIER_MARK_COUNT } from '@/limits'
+import { outlierBounds } from '@/ml/outliers'
+import type { Dataset } from '@/ml/preprocess'
+
+const dataset: Dataset = {
+  columns: ['a', 'b', 'label'],
+  rows: [
+    ['1', '2', 'x'],
+    ['2', '4', 'y'],
+    ['3', '6', 'x'],
+    ['', '8', 'y'],
+    ['5', '', 'x'],
+  ],
+}
+
+describe('numericValues', () => {
+  it('빈 칸을 0으로 채우지 않고 뺀다', () => {
+    expect(numericValues(dataset, 'a')).toEqual([1, 2, 3, 5])
+  })
+
+  it('없는 열은 빈 배열이다', () => {
+    expect(numericValues(dataset, 'nope')).toEqual([])
+  })
+
+  it('숫자가 아닌 값은 뺀다', () => {
+    expect(numericValues(dataset, 'label')).toEqual([])
+  })
+})
+
+describe('numericPairs', () => {
+  it('한쪽이라도 비면 그 행을 버려 행이 어긋나지 않는다', () => {
+    expect(numericPairs(dataset, 'a', 'b')).toEqual([
+      { x: 1, y: 2, row: 0 },
+      { x: 2, y: 4, row: 1 },
+      { x: 3, y: 6, row: 2 },
+    ])
+  })
+})
+
+describe('histogram', () => {
+  it('값이 없으면 칸도 없다', () => {
+    expect(histogram([])).toEqual([])
+  })
+
+  it('값이 전부 같으면 칸 하나에 전부 담는다', () => {
+    expect(histogram([7, 7, 7])).toEqual([{ start: 7, end: 7, count: 3 }])
+  })
+
+  it('모든 값이 어느 칸엔가 정확히 한 번 들어간다', () => {
+    const values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    const bins = histogram(values, 5)
+    expect(bins.reduce((sum, bin) => sum + bin.count, 0)).toBe(values.length)
+  })
+
+  it('최댓값은 마지막 칸에 든다 - 경계 밖으로 새지 않는다', () => {
+    const bins = histogram([0, 10], 5)
+    expect(bins[bins.length - 1]?.count).toBe(1)
+    expect(bins[0]?.count).toBe(1)
+  })
+})
+
+describe('fiveNumbers', () => {
+  it('값이 없으면 null이다', () => {
+    expect(fiveNumbers([])).toBeNull()
+  })
+
+  it('중앙값과 사분위수를 낸다', () => {
+    const summary = fiveNumbers([1, 2, 3, 4, 5])
+    expect(summary).toEqual({ min: 1, q1: 2, median: 3, q3: 4, max: 5 })
+  })
+
+  it('사이에 있는 분위수는 선형으로 잇는다', () => {
+    expect(fiveNumbers([1, 2, 3, 4])?.median).toBe(2.5)
+  })
+})
+
+describe('correlation', () => {
+  it('완전히 같이 커지면 1이다', () => {
+    expect(correlation([1, 2, 3], [2, 4, 6])).toBeCloseTo(1)
+  })
+
+  it('반대로 움직이면 -1이다', () => {
+    expect(correlation([1, 2, 3], [6, 4, 2])).toBeCloseTo(-1)
+  })
+
+  it('상수 열에서 NaN을 흘리지 않는다', () => {
+    expect(correlation([1, 1, 1], [1, 2, 3])).toBe(0)
+  })
+
+  it('값이 둘 미만이면 0이다', () => {
+    expect(correlation([1], [2])).toBe(0)
+  })
+})
+
+describe('correlationMatrix', () => {
+  it('대각선은 1이다', () => {
+    const matrix = correlationMatrix(dataset, ['a', 'b'])
+    expect(matrix[0]?.[0]).toBe(1)
+    expect(matrix[1]?.[1]).toBe(1)
+  })
+
+  it('대칭이다', () => {
+    const matrix = correlationMatrix(dataset, ['a', 'b'])
+    expect(matrix[0]?.[1]).toBeCloseTo(matrix[1]?.[0] ?? 0)
+  })
+
+  it('결측이 있어도 짝지은 행끼리만 재므로 유한하다', () => {
+    const matrix = correlationMatrix(dataset, ['a', 'b'])
+    for (const row of matrix) {
+      for (const cell of row) expect(Number.isFinite(cell)).toBe(true)
+    }
+  })
+})
+
+describe('boxPlot', () => {
+  it('값이 없으면 null이다', () => {
+    expect(boxPlot([])).toBeNull()
+  })
+
+  it('경계가 전처리기와 같은 함수에서 나온다', () => {
+    const values = [1, 2, 3, 4, 5, 100]
+    expect(boxPlot(values)?.bounds).toEqual(outlierBounds(values))
+  })
+
+  it('수염은 경계가 아니라 경계 안에서 가장 먼 실제 값이다', () => {
+    const plot = boxPlot([1, 2, 3, 4, 5, 100])
+    expect(plot?.whiskerLow).toBe(1)
+    expect(plot?.whiskerHigh).toBe(5)
+    expect(plot?.outlierCount).toBe(1)
+    expect(plot?.marks).toEqual([100])
+  })
+
+  it('같은 이상치는 점 하나로 찍고 개수는 전부 센다', () => {
+    // 안쪽 값이 넉넉해야 한다 — 100이 여덟 개 중 셋이면 Q3가 100이 되어 이상치가 아니다.
+    const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 100, 100]
+    const plot = boxPlot(values)
+    expect(plot?.marks).toEqual([100])
+    expect(plot?.outlierCount).toBe(3)
+  })
+
+  it('점의 수에 상한이 있다', () => {
+    const inside = Array.from({ length: 2000 }, () => 0).concat(
+      Array.from({ length: 2000 }, () => 1),
+    )
+    const far = Array.from({ length: OUTLIER_MARK_COUNT + 50 }, (_, index) => 1000 + index)
+    const plot = boxPlot([...inside, ...far])
+    expect(plot?.marks.length).toBe(OUTLIER_MARK_COUNT)
+    expect(plot?.outlierCount).toBe(OUTLIER_MARK_COUNT + 50)
+  })
+
+  it('IQR이 0이면 경계도 이상치도 없다', () => {
+    const plot = boxPlot([0, 0, 0, 0, 1])
+    expect(plot?.bounds).toBeNull()
+    expect(plot?.outlierCount).toBe(0)
+  })
+})
+
+describe('outlierCounts', () => {
+  const table: Dataset = {
+    columns: ['x', 'label'],
+    rows: [
+      ['1', 'a'],
+      ['2', 'b'],
+      ['3', 'a'],
+      ['4', 'b'],
+      ['5', 'a'],
+      ['100', 'b'],
+    ],
+  }
+
+  it('수치 열의 이상치를 전체 행으로 센다', () => {
+    expect(outlierCounts(table, ['x']).get('x')).toBe(1)
+  })
+
+  it('숫자가 없는 열은 0이 아니라 목록에서 빠진다', () => {
+    expect(outlierCounts(table, ['label']).has('label')).toBe(false)
+  })
+})

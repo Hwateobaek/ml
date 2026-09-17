@@ -54,15 +54,15 @@ function codeOf(run: () => unknown): string {
 
 describe('usableRows', () => {
   it('타깃이 빈 행은 어떤 전략이든 버린다 - 정답을 모르면 채점도 못 한다', () => {
-    expect(usableRows(dataset, features, '품종', 'mean')).toEqual([0, 1, 2, 3])
+    expect(usableRows(dataset, features, '품종', 'mean', undefined)).toEqual([0, 1, 2, 3])
   })
 
   it("'drop'이면 특성이 빈 행도 버린다", () => {
-    expect(usableRows(dataset, features, '품종', 'drop')).toEqual([0, 1])
+    expect(usableRows(dataset, features, '품종', 'drop', undefined)).toEqual([0, 1])
   })
 
   it('타깃이 없으면 특성만 본다 - 군집화에는 타깃이 없다', () => {
-    expect(usableRows(dataset, features, undefined, 'drop')).toEqual([0, 1, 4])
+    expect(usableRows(dataset, features, undefined, 'drop', undefined)).toEqual([0, 1, 4])
   })
 })
 
@@ -184,11 +184,11 @@ describe('결측 대체', () => {
     })
 
     it("'drop'이 공백만 든 행을 버린다", () => {
-      expect(usableRows(spaced, ['점수'], undefined, 'drop')).toEqual([0, 2, 3])
+      expect(usableRows(spaced, ['점수'], undefined, 'drop', undefined)).toEqual([0, 2, 3])
     })
 
     it('타깃이 공백이면 어떤 전략이든 그 행을 못 쓴다', () => {
-      expect(usableRows(spaced, [], '점수', 'mean')).toEqual([0, 2, 3])
+      expect(usableRows(spaced, [], '점수', 'mean', undefined)).toEqual([0, 2, 3])
     })
   })
 })

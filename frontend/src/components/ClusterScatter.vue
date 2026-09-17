@@ -19,6 +19,7 @@ import { Scatter } from 'vue-chartjs'
 import { useI18n } from 'vue-i18n'
 
 import { useFormat } from '@/composables/useFormat'
+import { columnLabel, type ColumnLabels } from '@/data/column-labels'
 import {
   FALLBACK_PALETTE,
   clusterChartData,
@@ -42,10 +43,18 @@ const props = defineProps<{
    */
   title: string
   lead: string
+  /**
+   * 학생이 고쳐 부르는 열 이름. **부르는 쪽이 내려준다** — 이 부품은 단독으로 마운트해
+   * 검사하는 것이라(`tests/cluster-scatter.spec.ts`) 전역 상태에 닿는 순간 그 검사가
+   * Pinia 없이는 못 돈다. 안 주면 원본 이름 그대로다.
+   */
+  labels?: ColumnLabels | undefined
 }>()
 
 const { t } = useI18n()
 const format = useFormat()
+
+const label = (name: string): string => columnLabel(name, props.labels)
 
 /** 고른 축. **행렬 열 번호가 아니라 `axes` 안의 자리다.** */
 const xAxis = ref(0)
@@ -104,7 +113,8 @@ onMounted(readTokens)
  */
 watch(theme, readTokens)
 
-const axisName = (position: number): string => props.axes[position]?.name ?? ''
+/** 축의 이름. **부르는 이름으로 찍는다** — 고르는 값은 축의 번호라 안 흔들린다. */
+const axisName = (position: number): string => label(props.axes[position]?.name ?? '')
 
 /**
  * 고른 두 축이 범주 축인가. **그림의 눈금·흩뿌림·중심점이 전부 여기서 갈린다**
@@ -213,7 +223,7 @@ const chartOptions = computed(() =>
           class="rounded-field border border-line-strong bg-surface px-2 py-1"
         >
           <option v-for="(axis, index) in props.axes" :key="axis.name" :value="index">
-            {{ axis.name }}
+            {{ label(axis.name) }}
           </option>
         </select>
       </label>
@@ -225,7 +235,7 @@ const chartOptions = computed(() =>
           class="rounded-field border border-line-strong bg-surface px-2 py-1"
         >
           <option v-for="(axis, index) in props.axes" :key="axis.name" :value="index">
-            {{ axis.name }}
+            {{ label(axis.name) }}
           </option>
         </select>
       </label>

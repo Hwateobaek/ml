@@ -194,7 +194,7 @@ describe('실험이 실제로 학습한다', () => {
 
   it('전처리기는 실험 안이 아니라 따로 나온다', async () => {
     const result = await runExperiment(inputFor(), frozen)
-    expect(result.preprocessor.format).toBe('mlpx-preprocess-v1')
+    expect(result.preprocessor.format).toBe('mlpx-preprocess-v2')
     // zip 안의 경로를 가리키는 참조는 저장 계층이 채운다. 여기서 적으면 거짓말이 된다.
     expect(result.experiment.preprocessor).toBeUndefined()
   })
@@ -741,6 +741,9 @@ describe('id와 changed', () => {
       testDataset: '바꾸면 기존 실험이 지워진다',
       // 예측 화면에서만 쓴다. 학습에 안 들어가므로 지표를 움직이지 않는다.
       predictDataset: '학습에 들어가지 않는다',
+      // 화면에 찍는 이름일 뿐이다 (`data/column-labels.ts`). 계산은 전부 원본 열 이름을
+      // 키로 하므로, 이름을 고쳐도 훈련 데이터도 지표도 그대로다.
+      columnLabels: '부르는 이름일 뿐 학습에 들어가지 않는다',
     }
 
     /**
@@ -1548,7 +1551,7 @@ describe('군집', () => {
   })
 
   it('전처리기가 따로 나온다', async () => {
-    expect(preprocessor.format).toBe('mlpx-preprocess-v1')
+    expect(preprocessor.format).toBe('mlpx-preprocess-v2')
   })
 
   it('하이퍼파라미터가 확정된다', async () => {
@@ -1628,6 +1631,7 @@ describe('표본 뽑기', () => {
       dataSettings('tabular', settings).features,
       dataSettings('tabular', settings).target,
       dataSettings('tabular', settings).preprocessing.missing,
+      undefined,
       settings.nSamples,
     )
 

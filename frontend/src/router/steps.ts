@@ -16,7 +16,15 @@ import { TASK_TYPES } from '@/project/schema'
 import type { DataType, TaskType } from '@/project/schema'
 
 /** 화면에 나오는 순서 그대로다. 이 배열이 레일의 순서이자 되돌아갈 순서다. */
-export const STEP_IDS = ['data', 'preprocess', 'train', 'results', 'predict', 'portfolio'] as const
+export const STEP_IDS = [
+  'data',
+  'visualize',
+  'preprocess',
+  'train',
+  'results',
+  'predict',
+  'portfolio',
+] as const
 
 export type StepId = (typeof STEP_IDS)[number]
 
@@ -104,6 +112,10 @@ interface Step {
  */
 const STEPS: Readonly<Record<StepId, Step>> = {
   data: { tasks: ['datasetReady'], requires: [] },
+  // **보는 화면이라 할 일이 없다** — `results`·`predict`와 같다. 데이터를 불러오기만
+  // 하면 열리고, 전처리에서 무엇을 고를지 정하기 전에 열을 먼저 살펴보는 자리다.
+  // 그래서 `preprocess` 앞에 선다.
+  visualize: { tasks: [], requires: ['datasetReady'] },
   preprocess: {
     tasks: ['targetChosen', 'featuresChosen'],
     requires: ['datasetReady'],

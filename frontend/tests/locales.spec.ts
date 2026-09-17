@@ -42,6 +42,7 @@ import {
   DATA_TYPES,
   MISSING_STRATEGIES,
   MODEL_OMISSION_REASONS,
+  OUTLIER_METHODS,
   SCALING_METHODS,
   TASK_TYPES,
 } from '../src/project/schema'
@@ -430,6 +431,7 @@ describe('프런트엔드 전용 코드', () => {
       ['missingStrategy', MISSING_STRATEGIES],
       ['scalingMethod', SCALING_METHODS],
       ['categoricalEncoding', CATEGORICAL_ENCODINGS],
+      ['outlierMethod', OUTLIER_METHODS],
       /**
        * **설명도 같은 배열에 매인다** (`architecture.md` §8.13 "목록과 설명은 1:1이고
        * 검사가 문다"). 선택지가 여섯에서 일곱이 되면 팝오버는 **화면에서 아무 일도 안
@@ -441,6 +443,7 @@ describe('프런트엔드 전용 코드', () => {
       ['missingHelp', MISSING_STRATEGIES],
       ['scalingHelp', SCALING_METHODS],
       ['encodingHelp', CATEGORICAL_ENCODINGS],
+      ['outlierHelp', OUTLIER_METHODS],
     ] as const
 
     /**
@@ -863,6 +866,8 @@ describe('화면이 부르는 키가 로케일에 있다', () => {
     'scalingMethod.', //   〃
     'scalingBasis.', // 스케일링 방식마다 기준을 읽는 말이 있다 (none만 없다)
     'categoricalEncoding.', //   〃
+    'outlierMethod.', //   〃 (이상치 처리, open-decisions.md "이상치는 훈련 데이터의 IQR로 클리핑한다")
+    'outlierHelp.', //     〃
     'columnKind.', // 열 자료형·내보내기 상태·언어·포트폴리오 문항마다 이름이 있다
     'save.', //   〃
     'language.', //   〃
@@ -1011,9 +1016,9 @@ describe('두 언어가 나란히 말한다', () => {
     // 레일의 단계 이름에는 줄바꿈 자리를 심어 두었다(`StepRail`). 같은 낱말이지만
     // 글자가 다르다.
     ['preprocess.tabular.effect', 'steps.preprocess.label'],
-    // 영어 `None`이 셋을 덮는다. 한국어는 `하지 않음`(전처리를 안 한다)과
+    // 영어 `None`이 넷을 덮는다. 한국어는 `하지 않음`(전처리를 안 한다)과
     // `없음`(값이 없다)이 다른 말이다.
-    ['categoricalEncoding.none', 'meta.none', 'scalingMethod.none'],
+    ['categoricalEncoding.none', 'meta.none', 'outlierMethod.none', 'scalingMethod.none'],
     // 체크리스트 항목만 `~하기`다. 영어는 항목도 버튼도 명령형이라 같아진다.
     ['data.image.add', 'predict.image.add', 'tasks.image.datasetReady'],
     // 데이터 화면에서 지우는 것은 **고른 여러 장**이고 포트폴리오에서는 **그 한 장**이다.

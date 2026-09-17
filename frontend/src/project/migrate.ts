@@ -29,7 +29,22 @@ export type Migration = (document: RawDocument) => RawDocument
  * 예: FORMAT_VERSION을 3으로 올린다면 { 2: (document) => ... } 를 여기 추가한다.
  * 빠뜨리면 tests/migrate.spec.ts가 잡는다.
  */
-export const MIGRATIONS: Record<number, Migration> = { 1: migrateV1ToV2 }
+export const MIGRATIONS: Record<number, Migration> = { 1: migrateV1ToV2, 2: migrateV2ToV3 }
+
+/**
+ * v2 -> v3. **이상치 클리핑 어휘** (mlpx-spec.md §9.2). **아무것도 안 바꾼다.**
+ *
+ * `preprocessing.outliers`는 선택 항목이고 없으면 `none`이다. v2 파일은 이상치를 처리한
+ * 적이 없으므로 필드가 없는 것이 곧 사실이다 — `none`을 적어 넣으면 **학생이 고른 적
+ * 없는 값이 파일에 생긴다.**
+ *
+ * **그래도 함수는 있어야 한다.** 버전이 오른 이유는 이 방향이 아니라 반대 방향이다 —
+ * v2만 아는 앱이 v3 파일을 열어 `clip`을 모른 채 자르지 않고 학습하는 것을 막는다.
+ * 체인은 빈칸을 거부하므로(`applyMigrations`) 올리는 길은 이 함수가 연다.
+ */
+function migrateV2ToV3(document: RawDocument): RawDocument {
+  return document
+}
 
 function asRecord(value: unknown): RawDocument | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

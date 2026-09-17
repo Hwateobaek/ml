@@ -570,6 +570,52 @@ export const MAX_ATTACHMENT_EDGE = 1536
 export const COLUMN_SAMPLE_COUNT = 3
 
 /**
+ * 히스토그램을 몇 칸으로 나누는가 (`data/visualize.ts`).
+ *
+ * 상한이 아니라 표시 규격이다 — 위 `COLUMN_SAMPLE_COUNT`와 같은 칸이고, 같은 이유로
+ * 여기 산다 (`CLAUDE.md` §1.5).
+ *
+ * **분류: 상한이 아니다.**
+ */
+export const HISTOGRAM_BIN_COUNT = 12
+
+/**
+ * 전체 데이터 보기가 **한 쪽에 그리는 행 수** (`views/data/FullDataDialog.vue`).
+ *
+ * 쪽으로 나누는 이유는 위 `TABLE_PREVIEW_ROW_COUNT`와 같다 — 받는 표가
+ * `MAX_DATASET_ROWS`까지 오는데, 그것을 한 번에 DOM에 그리면 교실 PC가 멈춘다.
+ * `CLUSTER_MEMBER_PAGE_SIZE`가 같은 일을 하는 같은 분류의 칸이다.
+ *
+ * **분류: 상한이 아니다.**
+ */
+export const FULL_DATA_PAGE_SIZE = 100
+
+/**
+ * 이상치 경계의 IQR 배수 (`ml/outliers.ts`). `Q1 − 배수×IQR`과 `Q3 + 배수×IQR` 밖이 이상치다.
+ *
+ * **1.5는 상자그림 수염의 교과서 값이다.** 학생이 못 고른다 (코드 소유자 결정,
+ * open-decisions.md "이상치는 훈련 데이터의 IQR로 클리핑한다") — 시각화의 점과 전처리가
+ * 자르는 값이 같은 것을 가리켜야 한다.
+ *
+ * **이 값을 바꾸면 모델이 바뀐다.** 클리핑 경계가 이것으로 곱해지므로 같은 설정의 재학습이
+ * 다른 숫자를 낸다 — 이미 나간 파일의 재실행 대조가 어긋난다.
+ *
+ * **분류: 상한이 아니다.**
+ */
+export const OUTLIER_IQR_MULTIPLIER = 1.5
+
+/**
+ * 상자그림에 점으로 찍는 이상치의 최대 개수 (`views/VisualizeView.vue`).
+ *
+ * 표가 `MAX_DATASET_ROWS`까지 오고 한쪽으로 긴 열이면 이상치가 수천 개다. 다 찍으면 그림이
+ * 무거워지는데 **점이 겹쳐 더 보이는 것도 없다.** 서로 다른 값만 이만큼 찍고, 전체 개수는
+ * 옆의 숫자가 말한다.
+ *
+ * **분류: 상한이 아니다.**
+ */
+export const OUTLIER_MARK_COUNT = 200
+
+/**
  * 값이 길 때 이력에 보여줄 앞 글자 수 (`ml/changes.ts`의 `shortHash`).
  *
  * 해시는 64자다. 통째로 보이면 그 줄이 화면을 덮고, 안 보이면 무엇이 달라졌는지 말할

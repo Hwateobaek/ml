@@ -18,6 +18,8 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useColumnLabels } from '@/composables/useColumnLabels'
+
 import AppButton from '@/components/AppButton.vue'
 import AppTable from '@/components/AppTable.vue'
 import TermPopover from '@/components/TermPopover.vue'
@@ -40,6 +42,8 @@ const ClusterScatter = defineAsyncComponent(() => import('@/components/ClusterSc
 const props = defineProps<{ input: PanelInput }>()
 
 const { t } = useI18n()
+/** 화면에 찍는 열 이름. 계산은 원본 이름을 그대로 쓴다 (`data/column-labels.ts`). */
+const { labels: columnLabels } = useColumnLabels()
 const format = useFormat()
 
 /**
@@ -209,6 +213,7 @@ function cellsOf(row: number): readonly string[] {
       :scatter="scatter"
       :title="t('results.tabular.clusterScatter')"
       :lead="t('results.tabular.clusterScatterLead')"
+      :labels="columnLabels"
     />
 
     <!--

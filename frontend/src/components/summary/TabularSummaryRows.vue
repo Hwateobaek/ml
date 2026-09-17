@@ -10,11 +10,14 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useColumnLabels } from '@/composables/useColumnLabels'
 import { readDataset } from '@/project/dataset'
 import { tabularDataOf } from '@/project/schema'
 import { useProjectStore } from '@/stores/project'
 
 const { t } = useI18n()
+/** 화면에 찍는 열 이름. 원본 이름은 계산이 그대로 쓴다 (data/column-labels.ts). */
+const { label } = useColumnLabels()
 const project = useProjectStore()
 
 /**
@@ -54,7 +57,9 @@ const data = computed(() => tabularDataOf(project.file?.document))
 
   <div class="flex justify-between gap-4">
     <dt class="font-bold text-ink-soft">{{ t('meta.tabular.target') }}</dt>
-    <dd class="truncate">{{ data?.target ?? t('meta.none') }}</dd>
+    <dd class="truncate">
+      {{ data?.target === undefined ? t('meta.none') : label(data.target) }}
+    </dd>
   </div>
 
   <div class="flex justify-between gap-4">

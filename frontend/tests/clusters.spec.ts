@@ -74,7 +74,7 @@ function preprocessing(overrides: Partial<Preprocessing> = {}): Preprocessing {
 
 /** 전처리기 · 훈련 행렬 · 학습된 모델까지 실제 경로로 만든다. */
 function fixture(options: Preprocessing = preprocessing(), k = 2) {
-  const rows = usableRows(DATASET, FEATURES, undefined, options.missing)
+  const rows = usableRows(DATASET, FEATURES, undefined, options.missing, undefined)
   const preprocessor = fitPreprocessor(DATASET, rows, FEATURES, options)
   const matrix = transform(preprocessor, DATASET, rows, options.categoricalEncoding)
   const fitted = fitKMeans(matrix, k, RANDOM_STATE)
@@ -388,7 +388,7 @@ describe('군집 요약', () => {
     }
     const features = ['값']
     const options = preprocessing({ scaling: 'none' })
-    const rows = usableRows(line, features, undefined, options.missing)
+    const rows = usableRows(line, features, undefined, options.missing, undefined)
     const preprocessor = fitPreprocessor(line, rows, features, options)
     const matrix = transform(preprocessor, line, rows, options.categoricalEncoding)
     const columns = matrixColumns(preprocessor, options.categoricalEncoding)

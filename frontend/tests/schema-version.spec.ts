@@ -35,6 +35,7 @@ import {
   FORMAT_VERSION,
   MISSING_STRATEGIES,
   MODEL_OMISSION_REASONS,
+  OUTLIER_METHODS,
   PORTFOLIO_ANSWER_FORMATS,
   RUN_STATUSES,
   SCALING_METHODS,
@@ -62,6 +63,7 @@ const CURRENT: Readonly<Record<string, readonly string[]>> = {
   MISSING_STRATEGIES,
   SCALING_METHODS,
   CATEGORICAL_ENCODINGS,
+  OUTLIER_METHODS,
   SPLIT_METHODS,
   RUN_STATUSES,
   MODEL_OMISSION_REASONS,
@@ -118,6 +120,29 @@ const VOCABULARY_BY_VERSION: Readonly<Record<number, Readonly<Record<string, rea
       CANONICAL_FORMAT_IDS: ['webp', 'jpeg'],
       PORTFOLIO_ANSWER_FORMATS: ['plain-v1'],
     },
+    /**
+     * **`OUTLIER_METHODS`가 새로 선다** (2026-09-17, mlpx-spec.md §9.2). 나머지는 v2와 같다.
+     *
+     * 필드는 선택 항목이라 v2 → v3 변환은 아무것도 안 바꾼다. 버전이 오른 이유는 반대
+     * 방향이다 — v2만 아는 앱이 `clip`·`range`를 모른 채 자르거나 빼지 않고 학습하는 것을
+     * 막는다. **`range`는 같은 날 v3가 나가기 전에 더해서 이 줄에 들어갔다** — 배포 전의
+     * 줄은 지문만 고친다.
+     */
+    3: {
+      TASK_TYPES: ['classification', 'regression', 'clustering'],
+      DATA_TYPES: ['tabular', 'image'],
+      MISSING_STRATEGIES: ['none', 'drop', 'mean', 'median', 'mostFrequent', 'zero'],
+      SCALING_METHODS: ['none', 'standard', 'minmax', 'robust'],
+      CATEGORICAL_ENCODINGS: ['none', 'onehot', 'ordinal'],
+      OUTLIER_METHODS: ['none', 'clip', 'range'],
+      SPLIT_METHODS: ['holdout', 'provided'],
+      RUN_STATUSES: ['done', 'failed'],
+      MODEL_OMISSION_REASONS: ['overBudget', 'tooLarge', 'engineUnsupported'],
+      SOURCE_ENCODINGS: ['utf-8', 'cp949', 'utf-16le', 'utf-16be'],
+      TRAINING_LOCATIONS: ['browser', 'server'],
+      CANONICAL_FORMAT_IDS: ['webp', 'jpeg'],
+      PORTFOLIO_ANSWER_FORMATS: ['plain-v1'],
+    },
   }
 
 const recorded = VOCABULARY_BY_VERSION[FORMAT_VERSION]
@@ -157,10 +182,11 @@ describe('어휘와 버전', () => {
    * "소스의 z.enum을 전부 훑는다"고 말했다 (R9 감사 B-4).
    *
    * **못 보는 것을 밝혀 둔다 — 배열 리터럴로 적은 어휘.** 정규식이 잡는 것은 이름 있는
-   * 상수뿐이다. 지금 그런 자리가 하나 있는데(`ml/preprocess.ts`의
-   * `z.enum(['numeric', 'categorical'])`) **그것은 `formatVersion`의 어휘가 아니다** —
-   * 전처리기 파일의 어휘는 `mlpx-preprocess-v1`이라는 형식 이름이 진다. 어휘를 이름 있는
-   * 상수로 두는 것이 이 저장소의 관행이고, 그 관행을 어기면 여기가 못 본다.
+   * 상수뿐이다. 지금 그런 자리가 둘인데(`ml/preprocess.ts`의
+   * `z.enum(['numeric', 'categorical'])`과 형식 이름 `z.union(… z.literal)`) **둘 다
+   * `formatVersion`의 어휘가 아니다** — 전처리기 파일의 어휘는 `mlpx-preprocess-v2`라는
+   * 형식 이름이 진다 (2026-09-17에 v1에서 올랐다). 어휘를 이름 있는 상수로 두는 것이
+   * 이 저장소의 관행이고, 그 관행을 어기면 여기가 못 본다.
    */
   it('빠뜨린 어휘가 없다 - src의 이름 있는 z.enum을 전부 훑는다', () => {
     const used = sourceFiles(join(process.cwd(), 'src')).flatMap((path) =>

@@ -23,7 +23,13 @@
  */
 
 import { ClientError, failureDetail, isClientError } from '../errors'
-import { DATA_COMPARABLE_KEYS, dataSettings } from '../project/schema'
+import {
+  DATA_COMPARABLE_KEYS,
+  dataSettings,
+  outlierMethodOf,
+  type OUTLIER_METHODS,
+} from '../project/schema'
+import { activeRanges, appliedRanges, describeRange, type ColumnRanges } from './ranges'
 import type {
   Experiment,
   DataType,
@@ -295,6 +301,41 @@ function changedPaths(before: unknown, after: unknown, prefix = ''): string[] {
  * 알고리즘과 하이퍼파라미터는 넣는다 - 실험 사이에서 학생이 실제로 가장 자주 바꾸는 것이
  * 그것인데, 그게 안 잡히면 changed가 대부분 빈 배열이 되어 쓸모가 없어진다.
  */
+/**
+ * 견줄 전처리 설정. **`outliers`가 없으면 `none`으로 채워서 견준다.**
+ *
+ * 필드는 선택 항목이고 없으면 `none`이다 (`project/schema.ts`의 `outlierMethodOf`).
+ * 안 채우면 v3 전에 학습한 실험(필드 없음)과 [안 함]을 누른 뒤의 실험(`none`)이 **다른
+ * 것으로 잡혀**, 아무것도 안 바꾼 학생에게 "이상치 처리가 바뀌었습니다"가 뜬다.
+ * `tests/changes.spec.ts`의 "필드 없음에서 none으로 가는 것은 변경이 아니다"가 지킨다.
+ *
+ * **`ranges`는 행을 빼는 것만 견준다** (`ml/ranges.ts`의 `activeRanges`·`appliedRanges`).
+ * `range`를 안 고른 동안 남아 있는 숫자와 특성에서 뺀 열의 숫자는 학습에 아무 일도 안
+ * 했으므로, 그대로 견주면 **안 쓰인 숫자가 변경 이력에 뜬다.** 그리고 목록 하나로 편다 —
+ * 객체로 두면 `changedPaths`가 열 이름으로 파고들어 `preprocessing.ranges.키 (cm).min`
+ * 같은 경로가 생기는데, 열 이름에 점이 들어 있으면 그 경로는 되돌려 읽을 수 없다.
+ * 같은 파일의 "범위는 쓰인 것만 견준다"가 지킨다.
+ */
+function withOutlierDefault(
+  value: unknown,
+  features: readonly string[],
+  target: string | undefined,
+): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value ?? null
+  const preprocessing = value as {
+    outliers?: (typeof OUTLIER_METHODS)[number]
+    ranges?: ColumnRanges
+  }
+  const rest: Record<string, unknown> = { ...preprocessing }
+  delete rest.ranges
+  const applied = appliedRanges(activeRanges(preprocessing), features, target)
+  return {
+    ...rest,
+    outliers: outlierMethodOf(preprocessing),
+    ...(applied.length === 0 ? {} : { ranges: applied.map(describeRange) }),
+  }
+}
+
 function comparable(
   settings: Experiment['settings'],
   runs: readonly Run[],
@@ -322,7 +363,22 @@ function comparable(
     // **`null`로 펴는 것이 핵심이다.** 없는 값을 undefined로 두면 `JSON.stringify`가
     // 그 키를 지워 "없다가 생김"과 "있다가 없어짐"이 둘 다 안 잡힌다 - 타깃을 고르고
     // 안 고른 것이 학생이 한 변경인데도 목록에 안 뜬다.
-    ...Object.fromEntries(DATA_COMPARABLE_KEYS.map((key) => [key, settings.data[key] ?? null])),
+    ...Object.fromEntries(
+      DATA_COMPARABLE_KEYS.map((key) => [
+        key,
+        key === 'preprocessing'
+          ? withOutlierDefault(
+              settings.data[key],
+              'features' in settings.data && Array.isArray(settings.data.features)
+                ? (settings.data.features as string[])
+                : [],
+              'target' in settings.data && typeof settings.data.target === 'string'
+                ? settings.data.target
+                : undefined,
+            )
+          : (settings.data[key] ?? null),
+      ]),
+    ),
     split: settings.split,
     // **`null`로 펴는 것이 핵심이다** (target과 같은 방식). 뽑기를 켠 것과 끈 것은
     // 학생이 한 변경인데, undefined로 두면 `JSON.stringify`가 그 키를 지워 "없다가

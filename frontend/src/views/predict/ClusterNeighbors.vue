@@ -17,6 +17,7 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useColumnLabels } from '@/composables/useColumnLabels'
 import AppBadge from '@/components/AppBadge.vue'
 import AppChoices from '@/components/AppChoices.vue'
 import AppTable from '@/components/AppTable.vue'
@@ -58,6 +59,7 @@ const props = defineProps<{
 const ClusterScatter = defineAsyncComponent(() => import('@/components/ClusterScatter.vue'))
 
 const { t } = useI18n()
+const { label, labels } = useColumnLabels()
 
 /**
  * 축의 한 칸을 글자로. **판정은 여기서 하지 않는다** (`ml/clusters.ts`의 `axisCell`) —
@@ -310,7 +312,7 @@ const neighborhood = computed<Neighborhood | null>(() => {
           class="flex items-baseline gap-1.5"
         >
           <dt>
-            <AppBadge>{{ mean.name }}</AppBadge>
+            <AppBadge>{{ label(mean.name) }}</AppBadge>
           </dt>
           <dd class="font-bold tabular-nums">{{ mean.value }}</dd>
         </div>
@@ -327,6 +329,7 @@ const neighborhood = computed<Neighborhood | null>(() => {
         :highlight="neighborhood.highlight"
         :title="t('predict.tabular.clusterScatterTitle')"
         :lead="t('predict.tabular.clusterScatterLead')"
+        :labels="labels"
       />
 
       <AppTable>

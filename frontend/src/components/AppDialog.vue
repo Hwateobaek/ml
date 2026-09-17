@@ -15,6 +15,14 @@ const props = defineProps<{
   open: boolean
   title: string
   description?: string
+  /**
+   * 상자의 크기. 기본은 **묻는 창의 폭**이다 (`max-w-lg`).
+   *
+   * `wide`는 **표를 담을 때만** 쓴다 — 화면에서 여백만 뺀 폭이라 열이 많은 표가
+   * 잘리지 않는다 (`styles/utilities.css`의 `dialog-panel-wide`). 묻는 창에 주면
+   * 문장 한 줄이 모니터 폭만큼 늘어나 읽기 어려워진다.
+   */
+  size?: 'default' | 'wide'
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -44,7 +52,8 @@ function onBackdrop(event: MouseEvent): void {
 <template>
   <dialog
     ref="dialog"
-    class="m-auto w-full max-w-lg rounded-card border border-line bg-surface p-0 text-ink shadow-pop backdrop:bg-slate-900/40"
+    class="m-auto rounded-card border border-line bg-surface p-0 text-ink shadow-pop backdrop:bg-slate-900/40"
+    :class="props.size === 'wide' ? 'dialog-panel-wide' : 'w-full max-w-lg'"
     @close="emit('close')"
     @click="onBackdrop"
   >
