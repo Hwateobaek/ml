@@ -43,6 +43,8 @@ import {
 } from '@/data/table'
 import ColumnInspector from './ColumnInspector.vue'
 import DataStatistics from './DataStatistics.vue'
+import MissingToggle from './MissingToggle.vue'
+import { isBlankCell, missingRowCount, rowHasMissing } from '@/data/missing'
 import FullDataDialog from './FullDataDialog.vue'
 import { columnLabel, withColumnLabel } from '@/data/column-labels'
 import { outlierCounts } from '@/data/visualize'
@@ -84,6 +86,8 @@ const confirming = ref(false)
 const inspecting = ref(false)
 /** 전체 데이터를 보는 팝업. */
 const viewingAll = ref(false)
+/** 결측치가 있는 행을 칠하는가. **미리보기와 팝업이 함께 쓴다** (`MissingToggle.vue`). */
+const showMissing = ref(false)
 
 /** 학생이 고쳐 부르는 열 이름. 확정된 표에만 있다 (`data/column-labels.ts`). */
 const columnLabels = computed(() => tabularDataOf(project.file?.document)?.columnLabels ?? {})
@@ -137,6 +141,16 @@ const outliers = computed(() => {
     current.dataset,
     current.columns.filter((column) => column.kind === 'numeric').map((column) => column.name),
   )
+})
+
+/**
+ * 전체 표에서 결측치가 있는 행의 수. **확정한 표만 센다** — 고르는 중인 파일은 앞부분만
+ * 읽어서 "전체"라고 부를 수가 없다. 켰을 때만 센다.
+ */
+const missingRows = computed(() => {
+  const current = saved.value
+  if (!showMissing.value || !current || opened.value) return undefined
+  return missingRowCount(current.dataset)
 })
 
 /** 지금 화면에 그릴 표. 파일을 고르는 중이면 그쪽이 이긴다. */
@@ -419,6 +433,12 @@ function kindOf(column: ColumnSummary): string {
           {{ t('data.tabular.previewTitle') }}
         </h3>
 
+        <MissingToggle
+          :on="showMissing"
+          :count="missingRows"
+          @toggle="showMissing = !showMissing"
+        />
+
         <AppTable class="min-h-0 flex-1">
           <thead class="sticky top-0 z-10">
             <tr>
@@ -429,8 +449,21 @@ function kindOf(column: ColumnSummary): string {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, index) in shown.dataset.rows" :key="index">
-              <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+            <!-- 칠하는 규칙은 전체 데이터 보기와 같다 (`FullDataDialog.vue`). -->
+            <tr
+              v-for="(row, index) in shown.dataset.rows"
+              :key="index"
+              :class="
+                showMissing && rowHasMissing(row, shown.columns.length) ? 'bg-caution-soft' : ''
+              "
+            >
+              <td
+                v-for="(column, cellIndex) in shown.columns"
+                :key="column.name"
+                :class="showMissing && isBlankCell(row[cellIndex]) ? 'bg-danger-soft' : ''"
+              >
+                {{ row[cellIndex] ?? '' }}
+              </td>
             </tr>
           </tbody>
         </AppTable>
@@ -540,6 +573,8 @@ function kindOf(column: ColumnSummary): string {
       :open="viewingAll"
       :dataset="saved.dataset"
       :labels="columnLabels"
+      :show-missing="showMissing"
+      @toggle-missing="showMissing = !showMissing"
       @close="viewingAll = false"
     />
   </div>

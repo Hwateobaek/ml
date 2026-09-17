@@ -19,7 +19,9 @@ import AppButton from '@/components/AppButton.vue'
 import AppDialog from '@/components/AppDialog.vue'
 import AppTable from '@/components/AppTable.vue'
 import { columnLabelsOf, type ColumnLabels } from '@/data/column-labels'
+import { isBlankCell, missingRowCount, rowHasMissing } from '@/data/missing'
 import { clampPage, pageCount, pageRange } from '@/data/paging'
+import MissingToggle from './MissingToggle.vue'
 import { FULL_DATA_PAGE_SIZE } from '@/limits'
 import type { Dataset } from '@/ml/preprocess'
 
@@ -27,9 +29,14 @@ const props = defineProps<{
   open: boolean
   dataset: Dataset
   labels?: ColumnLabels | undefined
+  /** 결측치가 있는 행을 칠하는가. 상태는 바깥이 갖는다 (`MissingToggle.vue`). */
+  showMissing?: boolean
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; toggleMissing: [] }>()
+
+/** 표 전체에서 결측치가 있는 행의 수. 켰을 때만 센다 — 끈 채로 십만 행을 돌 이유가 없다. */
+const missingRows = computed(() => (props.showMissing ? missingRowCount(props.dataset) : undefined))
 
 const { t } = useI18n()
 
@@ -75,6 +82,12 @@ function go(delta: number): void {
     @close="emit('close')"
   >
     <div class="flex min-h-0 flex-col gap-3">
+      <MissingToggle
+        :on="props.showMissing === true"
+        :count="missingRows"
+        @toggle="emit('toggleMissing')"
+      />
+
       <!--
         **표만 굴린다** (`dialog-table-box`). 대화상자째 굴리면 아래로 내려가는 동안
         쪽 단추가 화면 밖으로 나가, 다음 쪽을 누르려고 도로 올라와야 한다.
@@ -89,15 +102,36 @@ function go(delta: number): void {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.number">
+          <!--
+            **행을 연하게, 빈 칸을 진하게 칠한다.** 행만 칠하면 열이 많은 표에서 어느 칸이
+            비었는지 옆으로 굴려 가며 찾아야 한다.
+          -->
+          <tr
+            v-for="row in rows"
+            :key="row.number"
+            :class="
+              props.showMissing && rowHasMissing(row.cells, props.dataset.columns.length)
+                ? 'bg-caution-soft'
+                : ''
+            "
+          >
             <td class="tabular-nums text-ink-faint">{{ row.number }}</td>
             <!--
               **한 줄로 둔다.** 접히게 두면 `Chinstrap penguin (Pygoscelis antarctica)`
               같은 값 하나가 줄을 세 줄로 만들어, 한 쪽에 보이는 행이 셋으로 준다
               (2026-09-10, 사용자 화면). 넘치는 폭은 이 상자가 옆으로 굴려 보여준다.
             -->
-            <td v-for="(cell, index) in row.cells" :key="index" class="whitespace-nowrap">
-              {{ cell }}
+            <!--
+              **머리글의 열 수만큼 그린다.** 짧은 행의 모자란 칸도 결측이라 칠할 자리가 있어야
+              한다 (`data/missing.ts`).
+            -->
+            <td
+              v-for="(column, index) in props.dataset.columns"
+              :key="column"
+              class="whitespace-nowrap"
+              :class="props.showMissing && isBlankCell(row.cells[index]) ? 'bg-danger-soft' : ''"
+            >
+              {{ row.cells[index] ?? '' }}
             </td>
           </tr>
         </tbody>
