@@ -12,6 +12,7 @@ import {
   boxPlot,
   correlation,
   correlationMatrix,
+  descriptiveStats,
   fiveNumbers,
   histogram,
   numericPairs,
@@ -91,6 +92,25 @@ describe('fiveNumbers', () => {
 
   it('사이에 있는 분위수는 선형으로 잇는다', () => {
     expect(fiveNumbers([1, 2, 3, 4])?.median).toBe(2.5)
+  })
+})
+
+describe('descriptiveStats', () => {
+  it('값이 없으면 null이다', () => {
+    expect(descriptiveStats([])).toBeNull()
+  })
+
+  it('pandas describe()와 같은 여덟 칸을 낸다 — 표준편차는 n−1로 나눈다', () => {
+    const stats = descriptiveStats([2, 4, 4, 4, 5, 5, 7, 9])
+    expect(stats?.count).toBe(8)
+    expect(stats?.mean).toBe(5)
+    // 편차 제곱합 32를 7로 나눈다. n으로 나누면 정확히 2가 된다.
+    expect(stats?.std).toBeCloseTo(Math.sqrt(32 / 7), 12)
+    expect(stats).toMatchObject({ min: 2, q1: 4, median: 4.5, q3: 5.5, max: 9 })
+  })
+
+  it('값이 하나면 표준편차가 없다', () => {
+    expect(descriptiveStats([3])).toMatchObject({ count: 1, mean: 3, std: null })
   })
 })
 

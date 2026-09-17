@@ -118,6 +118,18 @@ export function formatStat(locale: string, value: number): string {
 }
 
 /**
+ * 데이터 통계 표의 칸. **소수 여섯 자리로 고정한다** — `formatStat`의 원칙을 여기서만 어긴다.
+ *
+ * 이 표는 교과서의 통계표(pandas `describe()`)와 **나란히 놓고 맞춰 보는 자리**다. 유효숫자
+ * 넷으로 자르면 같은 CSV인데 `4201.754386`이 `4,202`로 떠서 학생이 어느 쪽이 틀렸는지
+ * 묻게 된다. 같은 이유로 자리 구분 기호도 안 넣는다.
+ */
+export function formatDescribe(value: number): string {
+  if (!Number.isFinite(value)) return String(value)
+  return value.toFixed(6)
+}
+
+/**
  * **학생의 자료가 그대로 지나간 칸.** 전처리 미리보기에서 변환이 아무 일도 안 한 자리다
  * (`ml/preview.ts`의 `raw`).
  *
@@ -148,6 +160,7 @@ export function useFormat() {
     percent: (ratio: number) => formatPercent(locale.value, ratio),
     prediction: (value: number) => formatPrediction(locale.value, value),
     rawCell: (value: number) => formatRawCell(value),
+    describe: (value: number) => formatDescribe(value),
     stat: (value: number) => formatStat(locale.value, value),
     metric: (value: number, format: 'percent' | 'number') =>
       formatMetric(locale.value, value, format),

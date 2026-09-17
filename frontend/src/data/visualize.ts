@@ -133,6 +133,35 @@ export function fiveNumbers(values: readonly number[]): FiveNumbers | null {
   }
 }
 
+/** 데이터 통계 표의 한 열. pandas `describe()`가 내는 여덟 칸과 같은 순서다. */
+export interface DescriptiveStats extends FiveNumbers {
+  readonly count: number
+  readonly mean: number
+  /** 표본 표준편차(n−1로 나눈다). **값이 하나뿐이면 없다** — 나눌 수가 0이다. */
+  readonly std: number | null
+}
+
+/**
+ * 개수·평균·표준편차·다섯 수 요약. 값이 없으면 null이다.
+ *
+ * **표준편차는 n−1로 나눈다.** 교과서의 통계표가 pandas `describe()`로 뽑은 것이고 그쪽이
+ * 표본 표준편차다 — n으로 나누면 같은 CSV에서 교과서와 다른 숫자가 나온다.
+ *
+ * 사분위수는 `fiveNumbers`의 것이라 상자그림과 같은 규칙이다(numpy 선형 보간 = pandas 기본).
+ */
+export function descriptiveStats(values: readonly number[]): DescriptiveStats | null {
+  const summary = fiveNumbers(values)
+  if (summary === null) return null
+  const count = values.length
+  let sum = 0
+  for (const value of values) sum += value
+  const mean = sum / count
+  let squares = 0
+  for (const value of values) squares += (value - mean) ** 2
+  const std = count > 1 ? Math.sqrt(squares / (count - 1)) : null
+  return { count, mean, std, ...summary }
+}
+
 /** 상자그림 한 개. 좌표가 아니라 **값**이다 — 어디에 그릴지는 화면이 정한다. */
 export interface BoxPlot extends FiveNumbers {
   /** 이상치 경계. IQR이 0이면 없다 (`outlierBounds`). */

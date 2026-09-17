@@ -42,6 +42,7 @@ import {
   type TableDocument,
 } from '@/data/table'
 import ColumnInspector from './ColumnInspector.vue'
+import DataStatistics from './DataStatistics.vue'
 import FullDataDialog from './FullDataDialog.vue'
 import { columnLabel, withColumnLabel } from '@/data/column-labels'
 import { outlierCounts } from '@/data/visualize'
@@ -499,6 +500,18 @@ function kindOf(column: ColumnSummary): string {
         />
       </div>
     </details>
+
+    <!--
+      **확정한 표에만 있다.** 고르는 중인 파일은 앞 스무 줄뿐이라 평균이 표 전체의 것이
+      아니다 — 이상치 수와 같은 판단이다.
+    -->
+    <DataStatistics
+      v-if="saved && !opened"
+      class="shrink-0"
+      :dataset="saved.dataset"
+      :columns="saved.columns"
+      :labels="columnLabels"
+    />
 
     <input ref="fileInput" type="file" :accept="accept" class="hidden" @change="onPick" />
 
