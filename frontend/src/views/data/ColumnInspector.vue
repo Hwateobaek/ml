@@ -99,7 +99,7 @@ function commit(column: ColumnSummary, event: Event): void {
               :value="shownName(column)"
               type="text"
               :aria-label="t('data.tabular.renameLabel', { name: column.name })"
-              class="w-full rounded-field border border-line-strong bg-surface px-2 py-1 font-bold"
+              class="w-full min-w-32 rounded-field border border-line-strong bg-surface px-2 py-1 font-bold"
               @change="commit(column, $event)"
               @keyup.enter="commit(column, $event)"
             />
@@ -120,7 +120,16 @@ function commit(column: ColumnSummary, event: Event): void {
         <td>{{ column.missing }}</td>
         <td>{{ outlierText(column) }}</td>
         <td>{{ column.unique }}</td>
-        <td class="text-ink-soft">{{ column.samples.join(', ') }}</td>
+        <!--
+          **예시는 한 줄로 자른다** (2026-09-18, 태블릿 실측). 접히게 두면 `Adelie Penguin
+          (Pygoscelis adeliae), …` 하나가 그 행을 열 줄 가까이 늘려, 좁은 화면에서는 한 번에
+          한 열밖에 안 보인다. 전체는 `title`로 남긴다.
+        -->
+        <td class="text-ink-soft">
+          <span class="block max-w-72 truncate" :title="column.samples.join(', ')">
+            {{ column.samples.join(', ') }}
+          </span>
+        </td>
       </tr>
     </tbody>
   </AppTable>

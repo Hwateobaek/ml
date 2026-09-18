@@ -297,7 +297,12 @@ function onFeature(name: string, event: Event): void {
               @change="onFeature(column.summary.name, $event)"
             />
           </td>
-          <td class="w-full">
+          <!--
+            **이름 칸은 최소 폭을 갖는다** (2026-09-18, 태블릿 세로 실측). 옆 칸들이 전부
+            한 줄이라 좁은 화면에서는 이 칸만 줄어, `Culmen Length (mm)`가 세 줄로 섰다.
+            모자라는 폭은 표가 옆으로 굴려 보여준다.
+          -->
+          <td class="w-full min-w-48">
             <span class="block font-bold text-ink">{{ label(column.summary.name) }}</span>
             <span v-if="noteOf(column)" class="block" :class="toneOf(column)">
               {{ noteOf(column) }}

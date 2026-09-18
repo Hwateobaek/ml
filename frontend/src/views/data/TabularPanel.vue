@@ -460,6 +460,7 @@ function kindOf(column: ColumnSummary): string {
               <td
                 v-for="(column, cellIndex) in shown.columns"
                 :key="column.name"
+                class="whitespace-nowrap"
                 :class="showMissing && isBlankCell(row[cellIndex]) ? 'bg-danger-soft' : ''"
               >
                 {{ row[cellIndex] ?? '' }}
@@ -485,10 +486,13 @@ function kindOf(column: ColumnSummary): string {
         **넓은 화면에서는 검사기가 표 옆에 늘 열려 있다.** 결측 수를 보는 이유가 표의 그
         열을 보기 위해서이므로 둘은 함께 봐야 한다. 자기 열 안에서 스크롤하므로 열이
         몇 개든 표의 자리는 안 줄어든다.
+
+        **옆에 서는 폭은 `lg`부터다** (2026-09-18, 태블릿 세로 화면 실측). `md`(768px)에서
+        세우면 둘이 330px씩 나눠 가져 이름 칸이 `Yea`·`Spe`로 잘리고 한 행이 네 줄이 된다.
       -->
       <aside
         v-if="shown"
-        class="hidden min-w-0 flex-1 flex-col gap-3 rounded-panel border border-line bg-surface p-4 md:flex"
+        class="hidden min-w-0 flex-1 flex-col gap-3 rounded-panel border border-line bg-surface p-4 lg:flex"
       >
         <h3 class="leading-tight font-bold text-ink-soft">{{ t('data.tabular.inspector') }}</h3>
         <div class="flex min-h-0 flex-1 flex-col">
@@ -517,7 +521,7 @@ function kindOf(column: ColumnSummary): string {
     -->
     <details
       v-if="shown"
-      class="shrink-0 rounded-panel border border-line bg-surface md:hidden"
+      class="shrink-0 rounded-panel border border-line bg-surface lg:hidden"
       :open="inspecting"
     >
       <summary class="cursor-pointer px-4 py-2.5 text-base font-bold text-ink-soft">

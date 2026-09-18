@@ -840,7 +840,7 @@ function crossStyle(count: number): Record<string, string> {
         :description="t('visualize.groupedBoxPlotLead')"
       >
         <div class="flex flex-col gap-4">
-          <div class="flex flex-col gap-2 sm:flex-row sm:gap-5">
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5">
             <label class="flex items-center gap-2">
               <span class="font-bold text-ink-soft">{{ t('visualize.valueColumn') }}</span>
               <select
@@ -877,7 +877,7 @@ function crossStyle(count: number): Record<string, string> {
               class="grid grid-cols-1 items-center gap-1 sm:grid-cols-4 sm:gap-3"
             >
               <div class="min-w-0">
-                <p class="truncate font-bold">{{ item.group }}</p>
+                <p class="truncate font-bold" :title="item.group">{{ item.group }}</p>
                 <p class="text-ink-soft tabular-nums">
                   {{
                     t('visualize.groupSummary', {
@@ -982,7 +982,7 @@ function crossStyle(count: number): Record<string, string> {
           </div>
 
           <div v-else class="flex flex-col gap-4">
-            <div class="flex flex-col gap-2 sm:flex-row sm:gap-5">
+            <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5">
               <label class="flex items-center gap-2">
                 <span class="font-bold text-ink-soft">{{ t('visualize.axisX') }}</span>
                 <select
@@ -1145,7 +1145,7 @@ function crossStyle(count: number): Record<string, string> {
         :description="t('visualize.crossTabLead')"
       >
         <div class="flex flex-col gap-4">
-          <div class="flex flex-col gap-2 sm:flex-row sm:gap-5">
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5">
             <label class="flex items-center gap-2">
               <span class="font-bold text-ink-soft">{{ t('visualize.crossRows') }}</span>
               <select
