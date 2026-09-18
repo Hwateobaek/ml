@@ -147,7 +147,7 @@ describe('세 축으로 고른다', () => {
   it('회귀를 고르면 회귀 모델이 열리고 분류 모델이 잠긴다', () => {
     const options = algorithmOptions({ dataType: 'tabular', taskType: 'regression' }, context())
     expect(optionFor(options, 'linear_regression')?.enabled).toBe(true)
-    expect(optionFor(options, 'decision_tree')?.reason).toBe('ALGORITHM_NOT_FOR_TASK_TYPE')
+    expect(optionFor(options, 'svm')?.reason).toBe('ALGORITHM_NOT_FOR_TASK_TYPE')
   })
 
   it('데이터 타입이 다르면 잠긴다', () => {
@@ -245,7 +245,7 @@ describe('못 쓰는 이유가 쓸모 있어야 한다', () => {
 })
 
 describe('분기 없이 늘어난다', () => {
-  it('군집에서는 k_means만 살고 나머지는 이유와 함께 잠긴다', () => {
+  it('군집에서는 k_means와 dbscan만 살고 나머지는 이유와 함께 잠긴다', () => {
     // **예전 이름은 "등록부에 없는 과제 유형을 골라도 전부 잠긴다"였다.** 그 검사는
     // 군집에 알고리즘이 하나도 없던 시절의 것이고, V3에서 k_means가 살면서 확인
     // 대상을 잃었다. 축의 한 값에서 전부 잠기는 상태는 `DataType`에 이미지가 들어오는
@@ -253,10 +253,10 @@ describe('분기 없이 늘어난다', () => {
     const options = algorithmOptions({ dataType: 'tabular', taskType: 'clustering' }, context())
     expect(options).toHaveLength(ALGORITHMS.length)
     const enabled = enabledAlgorithms(options)
-    expect(enabled.map((a) => a.id)).toEqual(['k_means'])
+    expect(enabled.map((a) => a.id)).toEqual(['k_means', 'dbscan'])
     expect(
       options
-        .filter((o) => o.algorithm.id !== 'k_means')
+        .filter((o) => !['k_means', 'dbscan'].includes(o.algorithm.id))
         .every((o) => o.reason === 'ALGORITHM_NOT_FOR_TASK_TYPE'),
     ).toBe(true)
   })
@@ -298,6 +298,7 @@ describe('enabledAlgorithms', () => {
       'naive_bayes',
       'svm',
       'neural_network',
+      'gradient_boosting',
     ])
   })
 })

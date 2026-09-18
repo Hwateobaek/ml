@@ -85,4 +85,24 @@ export const MLJS_PARAMETERS: Readonly<Record<string, readonly HyperparameterSpe
   // 기본값을 3으로 뒀다. 학생이 k를 바꿔 가며 비교하는 것이 핵심 활동이다.
   // maxIter와 tol은 SVM과 같은 이유로 열지 않는다 — 수업 내용이 아니라 수렴 설정이다.
   k_means: [{ name: 'nClusters', integer: true, min: 2, max: 20, step: 1, default: 3 }],
+  /**
+   * **sklearn `GradientBoostingClassifier`·`Regressor`의 기본값 그대로다** — 100그루 ·
+   * 학습률 0.1 · 깊이 3 (open-decisions.md "그레이디언트 부스팅을 넣는다"). 셋 다 수업의
+   * 내용이다: 그루 수와 학습률은 서로 맞바꾸는 짝이고, 깊이는 랜덤 포레스트의 깊은 나무와
+   * 견주는 자리다. 아래쪽 끝이 0이 아닌 이유는 KNN·나무와 같다 — 0은 값이 아니라 고장이다.
+   */
+  gradient_boosting: [
+    { name: 'nEstimators', integer: true, min: 1, max: 500, step: 1, default: 100 },
+    { name: 'learningRate', integer: false, min: 0.01, max: 1, step: 0.01, default: 0.1 },
+    { name: 'maxDepth', integer: true, min: 1, max: 10, step: 1, default: 3 },
+  ],
+  /**
+   * **sklearn `DBSCAN`의 기본값 그대로다** — 반경 0.5 · 최소 이웃 5 (open-decisions.md
+   * "DBSCAN을 넣는다"). 반경은 **전처리 뒤의 거리**라 스케일링을 켰는지에 따라 뜻이
+   * 달라진다 — 표준화한 데이터에서 0.5가 흔한 출발점이다.
+   */
+  dbscan: [
+    { name: 'eps', integer: false, min: 0.01, max: 10, step: 0.01, default: 0.5 },
+    { name: 'minSamples', integer: true, min: 1, max: 100, step: 1, default: 5 },
+  ],
 }

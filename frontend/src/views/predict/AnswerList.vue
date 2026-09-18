@@ -160,7 +160,11 @@ function cardAnswer(model: PredictableModel): string | null {
   const value = props.answers.get(model.run.id)?.value
   if (value === undefined) return null
   if (!answersInClusters(model)) return answerText(value)
-  return t('results.clusterName', { index: Number(value) })
+  // **음수는 무리가 아니라 잡음이다** — DBSCAN이 어느 무리에도 안 넣은 점(`models/dbscan.ts`).
+  // `-1번 군집`이라 쓰면 그런 무리가 있는 것처럼 읽힌다.
+  const cluster = Number(value)
+  if (cluster < 0) return t('results.noiseName')
+  return t('results.clusterName', { index: cluster })
 }
 
 /**

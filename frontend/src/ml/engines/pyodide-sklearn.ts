@@ -84,9 +84,9 @@ export function resetPyodide(): void {
 /**
  * 알고리즘 id에서 sklearn 임포트 경로와 클래스 이름을 뽑는다.
  *
- * **알고리즘 id가 과제 유형을 결정한다** — 등록부에서 `decision_tree`는
- * `classification: true`이므로 항상 `DecisionTreeClassifier`다. 같은 id로
- * Classifier와 Regressor를 고를 일이 없다 (algorithms.ts).
+ * **분류와 회귀를 함께 하는 id는 회귀 클래스를 따로 적는다** (`regressor`). 예전에는
+ * "id가 과제 유형을 결정한다"였는데, 2026-09-18에 나무·숲·KNN이 회귀를 열면서 같은 id가
+ * 두 클래스를 가리키게 됐다. 고르는 것은 `FitInput.taskType`이다.
  *
  * **`fixed`는 우리가 고정하는 sklearn 옵션이다.** 학생에게 열지 않고 값이 바뀌지도
  * 않으므로 서술(`HyperparameterSpec`)이 아니라 여기 산다. 표의 칸으로 두는 이유는
@@ -96,20 +96,36 @@ export function resetPyodide(): void {
 interface SklearnClass {
   readonly module: string
   readonly cls: string
+  /** 회귀일 때의 클래스. 없으면 이 id는 회귀를 안 한다. */
+  readonly regressor?: string
   /** 생성자에 항상 붙는 인자. **Python 소스 조각이므로 우리 상수만 온다.** */
   readonly fixed?: readonly string[]
 }
 
 const SKLEARN_CLASSES: Readonly<Record<string, SklearnClass>> = {
-  decision_tree: { module: 'sklearn.tree', cls: 'DecisionTreeClassifier' },
+  decision_tree: {
+    module: 'sklearn.tree',
+    cls: 'DecisionTreeClassifier',
+    regressor: 'DecisionTreeRegressor',
+  },
   // KNN: 교실 데이터에서 kd-tree 구축 비용이 오히려 크고, brute force가 가장 결정론적이다.
   knn: {
     module: 'sklearn.neighbors',
     cls: 'KNeighborsClassifier',
+    regressor: 'KNeighborsRegressor',
     fixed: ["algorithm='brute'"],
   },
   logistic_regression: { module: 'sklearn.linear_model', cls: 'LogisticRegression' },
-  random_forest: { module: 'sklearn.ensemble', cls: 'RandomForestClassifier' },
+  random_forest: {
+    module: 'sklearn.ensemble',
+    cls: 'RandomForestClassifier',
+    regressor: 'RandomForestRegressor',
+  },
+  gradient_boosting: {
+    module: 'sklearn.ensemble',
+    cls: 'GradientBoostingClassifier',
+    regressor: 'GradientBoostingRegressor',
+  },
   naive_bayes: { module: 'sklearn.naive_bayes', cls: 'GaussianNB' },
   // SVM: mljs의 우리 SMO와 같은 조건으로 맞춘다 (선형 커널).
   svm: { module: 'sklearn.svm', cls: 'SVC', fixed: ["kernel='linear'"] },
@@ -190,6 +206,7 @@ const SUPPORTS_RANDOM_STATE: ReadonlySet<string> = new Set([
   'logistic_regression',
   'svm',
   'k_means',
+  'gradient_boosting',
 ])
 
 /**
@@ -199,8 +216,18 @@ const SUPPORTS_RANDOM_STATE: ReadonlySet<string> = new Set([
  * 모델과 예측 함수를 함께 남겨 놓아야 `predict()`가 나중에 불릴 때 쓸 수 있기
  * 때문이다. 매번 전체를 다시 만들면 Pyodide 전역이 점점 커진다.
  */
-function buildFitCode(algorithm: string, hp: Record<string, unknown>, randomState: number): string {
-  const info = classOf(algorithm)
+function buildFitCode(
+  algorithm: string,
+  hp: Record<string, unknown>,
+  randomState: number,
+  regression: boolean,
+): string {
+  const base = classOf(algorithm)
+  // 회귀 클래스가 없는 id로 회귀가 오면 등록부와 표가 어긋난 것이다 — 분류기로 돌리지 않는다.
+  if (regression && base.regressor === undefined) {
+    throw new ClientError('ALGORITHM_UNSUPPORTED', { algorithm })
+  }
+  const info = regression && base.regressor ? { ...base, cls: base.regressor } : base
 
   const params: string[] = []
   const formatted = formatHyperparameters(parameters(algorithm), hp)
@@ -291,15 +318,17 @@ export async function fit(algorithm: string, input: FitInput): Promise<FitResult
   // 2. 학습
   const code = isClustering
     ? buildKMeansFitCode(hp, input.randomState)
-    : buildFitCode(algorithm, hp, input.randomState)
+    : buildFitCode(algorithm, hp, input.randomState, input.taskType === 'regression')
   py.runPython(code)
 
-  // 3. 예측 함수
+  // 3. 예측 함수. **회귀는 수치 그대로다** — 문자열로 굳히면 지표가 오차를 못 잰다.
+  const regression = input.taskType === 'regression'
   const predict: Predict = (features) => {
     if (!py) throw new ClientError('ENGINE_NOT_READY')
     py.globals.set('_X_test_js', features)
     py.runPython(PREDICT_CODE)
-    return fetchList('_predictions').map(String)
+    const values = fetchList('_predictions')
+    return regression ? values.map(Number) : values.map(String)
   }
 
   // 4. 군집 결과

@@ -21,6 +21,7 @@ import {
   LINEAR_REGRESSION_FORMAT,
   NAIVE_BAYES_FORMAT,
   REFERENCE_FORMAT,
+  REFERENCE_REGRESSION_FORMAT,
   TREE_FORMAT,
   assertContext,
   interpreterFor,
@@ -300,7 +301,7 @@ describe('훈련 행이 필요한 형식', () => {
     const needy = SUPPORTED_MODEL_FORMATS.filter(
       (format) => interpreterFor(format)?.needsTrainingRows === true,
     )
-    expect(needy).toEqual([REFERENCE_FORMAT])
+    expect(needy).toEqual([REFERENCE_FORMAT, REFERENCE_REGRESSION_FORMAT])
   })
 
   it('요구하는데 안 주면 던진다 - 빈 훈련 데이터로 그럴듯한 답을 내지 않는다', async () => {

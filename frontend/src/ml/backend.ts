@@ -286,6 +286,14 @@ export interface Baseline {
    * 그 둘에서 네 배 넘게 틀린다.
    */
   readonly columns: 'linear' | 'flat'
+  /**
+   * **회귀일 때의 표.** 없으면 위 `ms`를 회귀에도 쓴다 (2026-09-18).
+   *
+   * 한 알고리즘이 두 유형을 할 때 **도는 코드가 다를 수 있다** — 나무·숲의 분류는 ml-cart
+   * 이고 회귀는 우리 CART다(`engines/cart-regression.ts`). 재 보니 결정트리 5,000행이
+   * 분류 22초 · 회귀 0.3초였다. 한 표로 쓰면 회귀 예상이 일흔 배 길게 틀린다.
+   */
+  readonly regression?: readonly (readonly [number, number])[]
 }
 
 export interface RuntimeOption {

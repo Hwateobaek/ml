@@ -1112,7 +1112,7 @@ describe('데이터 타입·과제 유형에 안 맞는 모델', () => {
             features: ['x'],
             target: 'y',
             split: { method: 'holdout', testSize: 0.3, stratify: false, randomState: 42 },
-            selectedAlgorithms: models('decision_tree'),
+            selectedAlgorithms: models('svm'),
           }),
           context: {
             limitsOff: false,
@@ -1138,7 +1138,7 @@ describe('데이터 타입·과제 유형에 안 맞는 모델', () => {
     // **표본은 가짜다.** 어휘에는 지금 되는 종류만 있어서(open-decisions.md "어휘에는
     // 지금 되는 것만 넣는다") 안 맞는 종류를 넘길 수 없다. 확인하는 것은 어휘가 아니라
     // unavailableReason이 데이터 타입 사유를 먼저 가로채는가다.
-    const experiment = await runLine({}, [{ ...NOT_FOR_TABULAR_ALGORITHM, id: 'decision_tree' }])
+    const experiment = await runLine({}, [{ ...NOT_FOR_TABULAR_ALGORITHM, id: 'svm' }])
     expect(experiment.runs[0]?.status).toBe('failed')
     expect(experiment.runs[0]?.failure?.code).toBe('ALGORITHM_NOT_FOR_DATA_TYPE')
   })
@@ -1147,7 +1147,7 @@ describe('데이터 타입·과제 유형에 안 맞는 모델', () => {
     const experiment = await runLine({})
     // 엔진이 정해지지 않았으므로 확정할 주체가 없다 - 준 값 그대로다 (mlpx-spec.md 3).
     expect(experiment.runs[0]?.hyperparameters).toEqual({})
-    expect(experiment.runs[0]?.algorithm).toBe('decision_tree')
+    expect(experiment.runs[0]?.algorithm).toBe('svm')
     expect(experiment.runs[0]?.computedBy).toBe('browser')
   })
 
@@ -1169,7 +1169,7 @@ describe('데이터 타입·과제 유형에 안 맞는 모델', () => {
         features: ['x'],
         target: 'y',
         split: { method: 'holdout', testSize: 0.3, stratify: false, randomState: 42 },
-        selectedAlgorithms: models('decision_tree', 'linear_regression'),
+        selectedAlgorithms: models('svm', 'linear_regression'),
       }),
     })
     expect(experiment.runs.map((run) => run.status)).toEqual(['failed', 'done'])

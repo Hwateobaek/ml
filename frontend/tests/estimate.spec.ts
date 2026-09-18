@@ -117,7 +117,7 @@ group('곱하는 축', () => {
   })
 
   it('등록부에 없는 알고리즘은 모른다고 한다', () => {
-    expect(baselineMs(input('gradient_boosting', 1000))).toBeNull()
+    expect(baselineMs(input('없는_알고리즘', 1000))).toBeNull()
   })
 })
 

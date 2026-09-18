@@ -23,6 +23,14 @@
  */
 
 import {
+  MLJS_DBSCAN_BASELINE_MS,
+  MLJS_DBSCAN_ROW_LIMIT,
+  MLJS_DECISION_TREE_REGRESSION_BASELINE_MS,
+  MLJS_GRADIENT_BOOSTING_BASELINE_MS,
+  MLJS_GRADIENT_BOOSTING_REGRESSION_BASELINE_MS,
+  MLJS_GRADIENT_BOOSTING_ROW_LIMIT,
+  MLJS_KNN_REGRESSION_BASELINE_MS,
+  MLJS_RANDOM_FOREST_REGRESSION_BASELINE_MS,
   MLJS_DECISION_TREE_ROW_LIMIT,
   MLJS_IMAGE_DECISION_TREE_ROW_LIMIT,
   MLJS_IMAGE_KMEANS_ROW_LIMIT,
@@ -100,7 +108,7 @@ export const ALGORITHMS: readonly Algorithm[] = [
   {
     id: 'decision_tree',
     dataTypes: { tabular: true, image: true },
-    taskTypes: { classification: true, regression: false, clustering: false },
+    taskTypes: { classification: true, regression: true, clustering: false },
     runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
     // 20,000행이 최악 145.6초다(2026-08-31 재실측, limits.ts). 분할 탐색이 노드마다
     // O(특성 × 행²)이고, 데이터가 잘 갈릴수록 얕게 끝난다. **이미지에서 가장 크게
@@ -110,14 +118,18 @@ export const ALGORITHMS: readonly Algorithm[] = [
       image: { mljs: MLJS_IMAGE_DECISION_TREE_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
     },
     baseline: {
-      tabular: { ms: MLJS_DECISION_TREE_BASELINE_MS, columns: 'linear' },
+      tabular: {
+        ms: MLJS_DECISION_TREE_BASELINE_MS,
+        columns: 'linear',
+        regression: MLJS_DECISION_TREE_REGRESSION_BASELINE_MS,
+      },
       image: UNMEASURED_BASELINE,
     },
   },
   {
     id: 'knn',
     dataTypes: { tabular: true, image: true },
-    taskTypes: { classification: true, regression: false, clustering: false },
+    taskTypes: { classification: true, regression: true, clustering: false },
     runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
     // **학습이 아니라 예측이 비싸고, 그 비용은 예측마다 되풀이된다.**
     maxRows: {
@@ -125,7 +137,11 @@ export const ALGORITHMS: readonly Algorithm[] = [
       image: { mljs: MLJS_IMAGE_KNN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
     },
     baseline: {
-      tabular: { ms: MLJS_KNN_BASELINE_MS, columns: 'flat' },
+      tabular: {
+        ms: MLJS_KNN_BASELINE_MS,
+        columns: 'flat',
+        regression: MLJS_KNN_REGRESSION_BASELINE_MS,
+      },
       image: UNMEASURED_BASELINE,
     },
   },
@@ -147,7 +163,7 @@ export const ALGORITHMS: readonly Algorithm[] = [
   {
     id: 'random_forest',
     dataTypes: { tabular: true, image: true },
-    taskTypes: { classification: true, regression: false, clustering: false },
+    taskTypes: { classification: true, regression: true, clustering: false },
     runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
     // 5000행 100그루가 약 7분이다. **값이 안 바뀌어도 적는다** (backend.ts의 maxRows).
     // 이미지는 1,000장이 521.7초라 등록부에서 가장 낮은 칸이 됐다.
@@ -156,7 +172,11 @@ export const ALGORITHMS: readonly Algorithm[] = [
       image: { mljs: MLJS_IMAGE_RANDOM_FOREST_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
     },
     baseline: {
-      tabular: { ms: MLJS_RANDOM_FOREST_BASELINE_MS, columns: 'linear' },
+      tabular: {
+        ms: MLJS_RANDOM_FOREST_BASELINE_MS,
+        columns: 'linear',
+        regression: MLJS_RANDOM_FOREST_REGRESSION_BASELINE_MS,
+      },
       image: UNMEASURED_BASELINE,
     },
   },
@@ -276,6 +296,56 @@ export const ALGORITHMS: readonly Algorithm[] = [
      */
     baseline: {
       tabular: { ms: MLJS_KMEANS_BASELINE_MS, columns: 'linear' },
+      image: UNMEASURED_BASELINE,
+    },
+  },
+  {
+    /**
+     * 그레이디언트 부스팅 (open-decisions.md "그레이디언트 부스팅을 넣는다", 2026-09-18).
+     * 랜덤 포레스트와 나란히 서는 둘째 앙상블 — 저쪽은 나무를 따로 키워 평균하고 여기는
+     * 앞 나무가 틀린 만큼을 다음 나무가 배운다.
+     *
+     * **사진은 닫았다.** 1,280차원에서 100그루 × 클래스 수만큼 행을 정렬하면 교실 시간 안에
+     * 끝나지 않고, 아직 재 보지 않았다 — 재기 전에 여는 것은 이 등록부의 방식이 아니다.
+     */
+    id: 'gradient_boosting',
+    dataTypes: { tabular: true, image: false },
+    taskTypes: { classification: true, regression: true, clustering: false },
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    maxRows: {
+      tabular: { mljs: MLJS_GRADIENT_BOOSTING_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+    },
+    baseline: {
+      tabular: {
+        ms: MLJS_GRADIENT_BOOSTING_BASELINE_MS,
+        // 분할 탐색이 열마다 행을 정렬하므로 특성에 선형이다 (1,000행에서 특성 8→16이 2.1배).
+        columns: 'linear',
+        regression: MLJS_GRADIENT_BOOSTING_REGRESSION_BASELINE_MS,
+      },
+      image: UNMEASURED_BASELINE,
+    },
+  },
+  {
+    /**
+     * DBSCAN (open-decisions.md "DBSCAN을 넣는다", 2026-09-18). 둘째 군집 알고리즘 —
+     * 무리 수를 안 정하고, 어느 무리에도 안 드는 점을 **잡음**으로 남긴다.
+     *
+     * **sklearn 실행 방법은 닫았다.** sklearn의 `DBSCAN`에는 `predict`가 없어 예측 화면이
+     * 설 자리가 없다. 순수 JS 쪽은 핵심 점 규칙으로 새 점을 배정한다 (mlpx-spec.md §5.14).
+     * **사진도 닫았다** — 1,280차원 거리에서 반경을 고르는 것은 수업 장면이 아니다.
+     */
+    id: 'dbscan',
+    dataTypes: { tabular: true, image: false },
+    taskTypes: { classification: false, regression: false, clustering: true },
+    runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false },
+    maxRows: {
+      tabular: { mljs: MLJS_DBSCAN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+    },
+    baseline: {
+      // 거리 계산이 특성에 선형이다 — K-평균과 같은 자리다.
+      tabular: { ms: MLJS_DBSCAN_BASELINE_MS, columns: 'linear' },
       image: UNMEASURED_BASELINE,
     },
   },

@@ -256,6 +256,26 @@ function measureKMeans(rows: number, clusters: number, columns: number = FEATURE
 }
 
 /**
+ * DBSCAN 한 번. `measure`가 분류로 채점하므로 K-평균처럼 따로 잰다. **군집 없는 데이터에
+ * 반경 0.5** — 거의 모든 점이 핵심 점이라 무리를 넓히는 둘째 `행²`까지 다 도는 천장이다.
+ */
+async function measureDbscan(rows: number, columns: number = FEATURES): Promise<LadderResult> {
+  const { features, target } = uniformData(rows, columns)
+  const started = performance.now()
+  const fitted = await fit('dbscan', {
+    features,
+    rowIndices: features.map((_, index) => index),
+    target,
+    taskType: 'clustering',
+    hyperparameters: { eps: 0.5, minSamples: 5 },
+    randomState: 42,
+  })
+  const cluster = fitted.clusterResult
+  if (cluster) evaluateCluster(features, cluster.assignments, cluster.centroids, 42)
+  return { elapsed: Math.round(performance.now() - started) }
+}
+
+/**
  * 사다리가 흔드는 축들. **어림의 지수를 이 목록이 정한다**(`projectionExponent`).
  *
  * **타입이 아니라 값이다** (2026-09-01 R17 감사 C-4). 타입만 있으면 축을 훑는 코드가
@@ -646,6 +666,76 @@ export const LADDERS: readonly Ladder[] = [
     axis: 'rows',
     points: [250, 500, 1000, 2000, 5000],
     job: (rows) => ({ algorithm: 'random_forest', rows }),
+  },
+  /**
+   * **그레이디언트 부스팅** (2026-09-18). 나무가 얕고(깊이 3) 층마다 행 전체를 한 번씩
+   * 정렬하므로 행에 **거의 선형**이다 — 트리 계열의 행² 규칙이 여기는 안 맞는다.
+   */
+  {
+    id: 'gradient_boosting',
+    label: '그레이디언트 부스팅 · 행 수 (기본 100그루 · 깊이 3)',
+    axis: 'rows',
+    points: [250, 500, 1000, 2000, 5000, 10_000, 20_000],
+    job: (rows) => ({ algorithm: 'gradient_boosting', rows }),
+    growth: 1,
+  },
+  {
+    id: 'gradient_boosting_trees',
+    label: '그레이디언트 부스팅 · 그루 수 (1,000행)',
+    axis: 'nEstimators',
+    points: [25, 50, 100, 200],
+    job: (trees) => ({
+      algorithm: 'gradient_boosting',
+      rows: 1000,
+      hyperparameters: { nEstimators: trees },
+    }),
+    growth: 1,
+  },
+  /**
+   * **회귀 기준표** (2026-09-18). 나무·숲·KNN·부스팅의 회귀는 분류와 **다른 코드**가 돈다 —
+   * 회귀 나무는 우리 CART(`engines/cart-regression.ts`)이고 분류 나무는 ml-cart다. 재 보니
+   * 5,000행에서 22초 대 0.3초라 **한 표로는 못 쓴다**(`backend.ts`의 `Baseline.regression`).
+   */
+  {
+    id: 'decision_tree_regression',
+    label: '의사결정트리 · 회귀 · 행 수',
+    axis: 'rows',
+    points: [1000, 5000, 20_000, 50_000],
+    job: (rows) => ({ algorithm: 'decision_tree', rows, regression: true }),
+  },
+  {
+    id: 'random_forest_regression',
+    label: '랜덤 포레스트 · 회귀 · 행 수 (기본 그루 수)',
+    axis: 'rows',
+    points: [1000, 2000, 5000, 20_000],
+    job: (rows) => ({ algorithm: 'random_forest', rows, regression: true }),
+  },
+  {
+    id: 'knn_regression',
+    label: 'KNN · 회귀 · 행 수 (학습 + 20% 예측)',
+    axis: 'rows',
+    points: [1000, 2000, 5000, 10_000],
+    job: (rows) => ({ algorithm: 'knn', rows, regression: true }),
+  },
+  {
+    id: 'gradient_boosting_regression',
+    label: '그레이디언트 부스팅 · 회귀 · 행 수',
+    axis: 'rows',
+    points: [1000, 2000, 5000, 10_000, 20_000],
+    job: (rows) => ({ algorithm: 'gradient_boosting', rows, regression: true }),
+    growth: 1,
+  },
+  /**
+   * **DBSCAN** (2026-09-18). 거리를 `행²`번 두 벌 잰다(핵심 점 판정 · 무리 넓히기) — 반경이
+   * 커서 거의 모든 점이 핵심 점인 **천장 쪽 데이터**로 잰다. 군집 지표(실루엣)까지 지난다.
+   */
+  {
+    id: 'dbscan',
+    label: 'DBSCAN · 행 수 (군집 없는 데이터, eps 0.5)',
+    axis: 'rows',
+    points: [500, 1000, 2000, 5000, 10_000, 20_000],
+    job: (rows) => ({ algorithm: 'dbscan', rows, hyperparameters: { eps: 0.5, minSamples: 5 } }),
+    run: (rows) => measureDbscan(rows),
   },
   /**
    * **사진 쪽 기준표 — 넷은 여기서 다 찬다** (2026-09-01).

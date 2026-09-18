@@ -87,6 +87,7 @@ const training = useTraining(spawnTrainingWorker, {
       rows: trainingRows.value,
       columns: featureWidth.value,
       hyperparameters: settings.value?.hyperparameters[algorithm]?.[runtime] ?? {},
+      taskType: project.taskType,
     })
     const factor = expected === null ? null : factorFromRun(elapsedMs, expected)
     if (factor === null) return
@@ -276,6 +277,7 @@ const estimates = computed<Estimate[]>(() => {
           rows: trainingRows.value,
           columns: featureWidth.value,
           hyperparameters: values[row.algorithm]?.[row.runtime] ?? {},
+          taskType: project.taskType,
         },
         measured,
       ),

@@ -512,7 +512,25 @@ export function evaluateCluster(
     })
   }
 
-  const evaluation = CLUSTER_EVALUATOR(data, assignments, centroids, randomState)
+  /**
+   * **잡음(`-1`)은 지표에서 뺀다** (open-decisions.md "DBSCAN을 넣는다"). DBSCAN이 어느
+   * 무리에도 안 넣은 점에는 중심점이 없어 이너셔를 잴 수 없고, 실루엣에서 잡음을 한
+   * 무리로 치면 "잡음끼리 가깝다"는 없는 사실을 점수에 섞는다. sklearn 쪽에서도 흔히
+   * `labels != -1`로 걸러서 잰다. **K-평균은 `-1`을 안 내므로 이 줄이 값을 안 바꾼다.**
+   */
+  const kept: number[] = []
+  assignments.forEach((cluster, index) => {
+    if (cluster >= 0) kept.push(index)
+  })
+  const evaluation =
+    kept.length === assignments.length
+      ? CLUSTER_EVALUATOR(data, assignments, centroids, randomState)
+      : CLUSTER_EVALUATOR(
+          kept.map((index) => data[index]!),
+          kept.map((index) => assignments[index]!),
+          centroids,
+          randomState,
+        )
 
   for (const [metric, value] of Object.entries(evaluation.metrics)) {
     if (!Number.isFinite(value)) throw new ClientError('JOB_FAILED', { metric })

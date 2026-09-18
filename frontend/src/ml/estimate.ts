@@ -25,6 +25,9 @@
 
 import {
   BASELINE_COLUMNS,
+  MLJS_GRADIENT_BOOSTING_BASELINE_DEPTH,
+  MLJS_GRADIENT_BOOSTING_BASELINE_TREES,
+  MLJS_GRADIENT_BOOSTING_DEPTH_MS,
   MLJS_KMEANS_BASELINE_CLUSTERS,
   MLJS_KMEANS_CLUSTERS_MS,
   MLJS_LOGISTIC_REGRESSION_BASELINE_MAX_ITER,
@@ -38,7 +41,7 @@ import {
   TRAINING_ESTIMATE_COARSE_STEP_SECONDS,
 } from '../limits'
 
-import type { DataType } from '../project/schema'
+import type { DataType, TaskType } from '../project/schema'
 
 import { ALGORITHMS } from './algorithms'
 import { DEFAULT_BACKBONE_ID, backboneFor } from './backbones'
@@ -94,6 +97,11 @@ export interface EstimateInput {
   readonly columns: number
   /** 확정된 손잡이. 비어 있으면 기본값으로 본다. */
   readonly hyperparameters: Record<string, unknown>
+  /**
+   * 과제 유형. **회귀면 등록부의 회귀 표를 쓴다**(`Baseline.regression`) — 없으면 분류 표다.
+   * 안 주면 분류로 본다.
+   */
+  readonly taskType?: TaskType | undefined
 }
 
 function numberOr(source: Record<string, unknown>, name: string, fallback: number): number {
@@ -153,6 +161,23 @@ function handleFactor(
   columns: number,
   dataType: DataType,
 ): number {
+  if (algorithm === 'gradient_boosting') {
+    /**
+     * **그루 수는 선형이고 깊이는 잰 표를 잇는다** (2026-09-18 실측). 그루 25 · 50 · 100 ·
+     * 200이 980 · 1,981 · 3,759 · 7,698ms로 곧은 선이고, 깊이 1 · 3 · 6 · 10은 곧지 않다
+     * (얕은 층에서 행 전체를 정렬하는 몫이 깊이와 무관하게 깔려 있다).
+     */
+    const trees = numberOr(hyperparameters, 'nEstimators', MLJS_GRADIENT_BOOSTING_BASELINE_TREES)
+    const depth = numberOr(hyperparameters, 'maxDepth', MLJS_GRADIENT_BOOSTING_BASELINE_DEPTH)
+    const baseline = interpolate(
+      MLJS_GRADIENT_BOOSTING_DEPTH_MS,
+      MLJS_GRADIENT_BOOSTING_BASELINE_DEPTH,
+    )
+    return (
+      (Math.max(trees, 1) / MLJS_GRADIENT_BOOSTING_BASELINE_TREES) *
+      (interpolate(MLJS_GRADIENT_BOOSTING_DEPTH_MS, Math.max(depth, 1)) / baseline)
+    )
+  }
   if (algorithm === 'random_forest') {
     const trees = numberOr(hyperparameters, 'nEstimators', MLJS_RANDOM_FOREST_BASELINE_TREES)
     // 그루 수에는 선형이다 (실측: 1,000행에서 그루당 223~226ms로 일정).
@@ -229,7 +254,9 @@ export function baselineMs(input: EstimateInput): number | null {
   const baseline = baselineOf(input.algorithm, input.dataType)
   if (baseline === null) return null
 
-  const rows = interpolate(baseline.ms, Math.max(input.rows, 1))
+  const table =
+    input.taskType === 'regression' && baseline.regression ? baseline.regression : baseline.ms
+  const rows = interpolate(table, Math.max(input.rows, 1))
   // 특성 수에 선형인 것은 트리 계열과 SVM뿐이다. KNN과 로지스틱은 안 곱한다 (실측).
   const columns = baseline.columns === 'linear' ? Math.max(input.columns, 1) / BASELINE_COLUMNS : 1
   return (

@@ -74,6 +74,20 @@ import type {
 } from '../models'
 import type { ModelFile, Predict } from '../models/types'
 import type { ComputePools, ForestTree } from '../pools'
+import {
+  DBSCAN_FORMAT,
+  REFERENCE_REGRESSION_FORMAT,
+  TREE_REGRESSION_FORMAT,
+  dbscanPredict,
+  gradientBoostingPredict,
+  gradientBoostingRegressionPredict,
+  knnRegressionPredict,
+  regressionForestPredict,
+} from '../models'
+import type { DbscanModel, RegressionNode, RegressionTreeModel } from '../models'
+import { allRows, growRegressionTree, toColumns } from './cart-regression'
+import { clusterMeans, fitDbscan } from './dbscan'
+import { fitGradientBoostingClassifier, fitGradientBoostingRegression } from './gradient-boosting'
 import { fitLogistic } from './logistic'
 import { fitNeural } from './neural'
 import { fitKMeans } from './mljs-kmeans'
@@ -602,20 +616,95 @@ function fitLeastSquares(
   return { format: LINEAR_REGRESSION_FORMAT, featureCount, coefficients, intercept }
 }
 
-const TRAINERS: Record<string, Trainer> = {
-  decision_tree: classifier((input) => {
-    const model = new DecisionTreeClassifier({
-      gainFunction: 'gini',
-      maxDepth: numberOption(input.hyperparameters, 'maxDepth'),
-      minNumSamples: numberOption(input.hyperparameters, 'minNumSamples'),
-    })
-    return {
-      predictor: model,
-      serialize: (classes, featureCount) => serializeTree(model, classes, featureCount),
-    }
-  }),
+/**
+ * 회귀 나무 여러 그루 (mlpx-spec.md §5.12). **결정트리는 `treeCount` 1에 배깅 없음이다.**
+ *
+ * 랜덤 포레스트 회귀의 배깅은 **씨앗에서 복원 추출**한다 — 같은 씨앗이면 같은 숲이다.
+ * 특성은 매 분할에서 전부 본다(sklearn `RandomForestRegressor`의 `max_features=1.0`이고,
+ * 분류 숲의 라이브러리 기본값과도 같다).
+ */
+function regressionTrees(
+  input: FitInput,
+  treeCount: number,
+  bagging: boolean,
+  maxDepth: number,
+  minSplit: number,
+): RegressionTreeModel {
+  const featureCount = input.features[0]?.length ?? 0
+  const columns = toColumns(input.features)
+  const targets = Float64Array.from(input.target, (value) => Number(value))
+  if (!targets.every((value) => Number.isFinite(value))) {
+    throw new ClientError('JOB_FAILED', { detail: 'regression target not numeric' })
+  }
+  const n = targets.length
+  const random = seededRandom(input.randomState)
+  const trees: { nodes: RegressionNode[] }[] = []
+  for (let tree = 0; tree < treeCount; tree += 1) {
+    const rows = bagging
+      ? Int32Array.from({ length: n }, () => Math.min(n - 1, Math.floor(random() * n)))
+      : allRows(n)
+    trees.push({ nodes: growRegressionTree({ columns, targets, rows, maxDepth, minSplit }) })
+  }
+  return { format: TREE_REGRESSION_FORMAT, featureCount, trees }
+}
 
+/** 회귀 나무 모델에서 학습 결과를 만든다. 예측은 해석기의 것을 그대로 쓴다. */
+function regressionTreeResult(model: RegressionTreeModel): FitResult {
+  return { predict: regressionForestPredict(model), model }
+}
+
+/**
+ * 분류 나무. **회귀는 위 `regressionTrees`가 맡는다** — `decision_tree`가 두 유형을 하는
+ * 자리가 `TRAINERS`의 그 줄이다.
+ */
+const decisionTreeClassifier = classifier((input) => {
+  const model = new DecisionTreeClassifier({
+    gainFunction: 'gini',
+    maxDepth: numberOption(input.hyperparameters, 'maxDepth'),
+    minNumSamples: numberOption(input.hyperparameters, 'minNumSamples'),
+  })
+  return {
+    predictor: model,
+    serialize: (classes, featureCount) => serializeTree(model, classes, featureCount),
+  }
+})
+
+const TRAINERS: Record<string, Trainer> = {
+  /**
+   * **분류와 회귀를 함께 한다** (2026-09-18, open-decisions.md "회귀에도 나무와 이웃을
+   * 연다"). 손잡이는 같은 둘이고 뜻도 같다 — `minNumSamples`개 **이하**인 노드는 안
+   * 나눈다(ml-cart의 규칙). 그래서 회귀 나무의 `minSplit`이 그 값 + 1이다.
+   */
+  decision_tree: (input) =>
+    input.taskType === 'regression'
+      ? regressionTreeResult(
+          regressionTrees(
+            input,
+            1,
+            false,
+            numberOption(input.hyperparameters, 'maxDepth'),
+            numberOption(input.hyperparameters, 'minNumSamples') + 1,
+          ),
+        )
+      : decisionTreeClassifier(input),
+
+  /**
+   * **분류와 회귀를 함께 한다.** 회귀 숲은 분류 숲의 라이브러리 기본값(깊이 제한 없음 ·
+   * 3개 이하면 안 나눔)을 그대로 따르고 손잡이도 같은 `nEstimators` 하나다. **코어로
+   * 가르지는 않는다** — 워커 풀은 분류 숲의 것이다. 결과는 어느 쪽이든 씨앗이 정한다.
+   */
   random_forest: async (input) => {
+    if (input.taskType === 'regression') {
+      return regressionTreeResult(
+        regressionTrees(
+          input,
+          numberOption(input.hyperparameters, 'nEstimators'),
+          true,
+          Number.POSITIVE_INFINITY,
+          4,
+        ),
+      )
+    }
     const { encoded, labels, decode } = labelCodec(input.target)
     const treeCount = numberOption(input.hyperparameters, 'nEstimators')
     const featureCount = input.features[0]?.length ?? 0
@@ -706,9 +795,31 @@ const TRAINERS: Record<string, Trainer> = {
    * 학습이랄 것이 없다 - 담는 것은 행 번호뿐이다.
    */
   knn: (input) => {
-    const { labels } = labelCodec(input.target)
     const k = numberOption(input.hyperparameters, 'k')
     const featureCount = input.features[0]?.length ?? 0
+    /**
+     * **회귀는 이웃 k개의 평균이다** (mlpx-spec.md §5.6.1). 이웃을 고르는 규칙은 분류와 같은
+     * 함수이고, 담는 것도 같은 행 번호다. 채점을 코어로 가르는 풀은 분류의 투표용이라 안 쓴다.
+     */
+    if (input.taskType === 'regression') {
+      const predict = knnRegressionPredict({
+        k,
+        featureCount,
+        rows: input.features,
+        labels: input.target.map(String),
+        indices: input.rowIndices,
+      })
+      return {
+        predict,
+        model: {
+          format: REFERENCE_REGRESSION_FORMAT,
+          k,
+          featureCount,
+          trainIndices: [...input.rowIndices],
+        },
+      }
+    }
+    const { labels } = labelCodec(input.target)
     const rows = input.features
     const rowLabels = input.target.map(String)
 
@@ -1058,6 +1169,82 @@ const TRAINERS: Record<string, Trainer> = {
       ...(warning ? { warning } : {}),
     }
   },
+}
+
+/**
+ * 그레이디언트 부스팅 (open-decisions.md "그레이디언트 부스팅을 넣는다"). **분류와 회귀를
+ * 함께 한다** — 손실만 갈리고(제곱오차 · 로그 손실) 나무를 쌓는 틀은 같다
+ * (`engines/gradient-boosting.ts`). 예측은 해석기의 것을 그대로 쓴다.
+ */
+TRAINERS.gradient_boosting = (input) => {
+  const options = {
+    nEstimators: numberOption(input.hyperparameters, 'nEstimators'),
+    learningRate: numberOption(input.hyperparameters, 'learningRate'),
+    maxDepth: numberOption(input.hyperparameters, 'maxDepth'),
+  }
+  if (input.taskType === 'regression') {
+    const targets = input.target.map(Number)
+    if (!targets.every((value) => Number.isFinite(value))) {
+      throw new ClientError('JOB_FAILED', { detail: 'regression target not numeric' })
+    }
+    const model = fitGradientBoostingRegression(input.features, targets, options)
+    return { predict: gradientBoostingRegressionPredict(model), model }
+  }
+  const { encoded, labels } = labelCodec(input.target)
+  // **클래스가 하나면 쌓을 것이 없다.** 점수의 시작값이 `log(0)`이 되어 NaN이 흐른다 —
+  // 조용히 틀린 숫자 대신 실패 run으로 남긴다. 분할이 층화라 보통 여기 오지 않는다.
+  if (labels.length < 2) {
+    throw new ClientError('JOB_FAILED', { classCount: labels.length })
+  }
+  const model = fitGradientBoostingClassifier(input.features, encoded, labels, options)
+  return { predict: gradientBoostingPredict(model), model }
+}
+
+/**
+ * DBSCAN (open-decisions.md "DBSCAN을 넣는다"). **타깃이 없다** — K-평균과 같다.
+ *
+ * **잡음이 있거나 무리가 둘 미만이면 경고를 붙인다.** 실패가 아니다 — 반경을 바꿔 보라는
+ * 신호이고, 그 조절이 이 알고리즘으로 하는 수업의 전부다. 지표는 잡음을 뺀 점으로 낸다
+ * (`metrics.ts`의 `evaluateCluster`).
+ */
+TRAINERS.dbscan = (input) => {
+  const featureCount = input.features[0]?.length ?? 0
+  const eps = numberOption(input.hyperparameters, 'eps')
+  const minSamples = numberOption(input.hyperparameters, 'minSamples')
+  const result = fitDbscan(input.features, eps, minSamples)
+
+  const cores: number[][] = []
+  const coreLabels: number[] = []
+  result.core.forEach((isCore, index) => {
+    if (isCore !== 1) return
+    cores.push([...(input.features[index] ?? [])])
+    coreLabels.push(result.labels[index] ?? 0)
+  })
+  const model: DbscanModel = {
+    format: DBSCAN_FORMAT,
+    featureCount,
+    eps,
+    clusterCount: result.clusterCount,
+    cores,
+    coreLabels,
+  }
+
+  let noise = 0
+  for (const label of result.labels) if (label < 0) noise += 1
+  const warning: EngineWarning | undefined =
+    noise > 0 || result.clusterCount < 2
+      ? { code: 'DBSCAN_NOISE', params: { noise, clusters: result.clusterCount } }
+      : undefined
+
+  return {
+    predict: dbscanPredict(model),
+    model,
+    clusterResult: {
+      assignments: Array.from(result.labels),
+      centroids: clusterMeans(input.features, result.labels, result.clusterCount),
+    },
+    ...(warning ? { warning } : {}),
+  }
 }
 
 /** 이 엔진이 돌릴 수 있는 알고리즘. ml/algorithms.ts의 runtimes와 맞아야 한다. */

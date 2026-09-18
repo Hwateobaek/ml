@@ -45,4 +45,10 @@ export const PYODIDE_SKLEARN_PARAMETERS: Readonly<Record<string, readonly Hyperp
   svm: [{ name: 'C', integer: false, min: 0.01, max: 100, step: 0.01, default: 1 }],
   // sklearn KMeans — sklearn 기본값은 n_clusters=8이지만 교실에 맞춰 3.
   k_means: [{ name: 'n_clusters', integer: true, min: 2, max: 20, step: 1, default: 3 }],
+  // sklearn GradientBoostingClassifier·Regressor — 기본값 그대로.
+  gradient_boosting: [
+    { name: 'n_estimators', integer: true, min: 1, max: 500, step: 1, default: 100 },
+    { name: 'learning_rate', integer: false, min: 0.01, max: 1, step: 0.01, default: 0.1 },
+    { name: 'max_depth', integer: true, min: 1, max: 10, step: 1, default: 3 },
+  ],
 }

@@ -289,6 +289,12 @@ export const SHARED_ERROR_CODES = [
  * 간다 - 지금은 브라우저에서만 나온다.
  */
 export const CLIENT_WARNING_CODES = [
+  /**
+   * **DBSCAN이 잡음을 남겼거나 무리를 둘 이상 못 찾았다** (2026-09-18, open-decisions.md
+   * "DBSCAN을 넣는다"). 실패가 아니다 — 잡음(`-1`)은 이 알고리즘의 정상 결과이고, 지표는
+   * 잡음을 뺀 점으로 난다. 학생이 할 일은 반경(`eps`)과 최소 이웃 수를 바꿔 보는 것이다.
+   */
+  'DBSCAN_NOISE',
   // SMO가 반복 예산 안에 수렴하지 못했다. 계수는 나왔고 지표도 나왔다 - 덜 다듬어졌을 뿐이다.
   'SVM_NOT_CONVERGED',
   // 경사하강이 스텝 예산 안에 최적점에 못 닿았다. sklearn의 ConvergenceWarning 자리다

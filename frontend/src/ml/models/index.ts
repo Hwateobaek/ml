@@ -23,9 +23,23 @@ import {
   loadNeuralProba,
   loadNeuralRegressionModel,
 } from './neural'
-import { REFERENCE_FORMAT, loadReferenceModel } from './reference'
+import {
+  REFERENCE_FORMAT,
+  REFERENCE_REGRESSION_FORMAT,
+  loadReferenceModel,
+  loadReferenceRegressionModel,
+} from './reference'
 import { SVM_FORMAT, loadSvmModel } from './svm'
 import { TREE_FORMAT, loadTreeModel } from './tree'
+import { TREE_REGRESSION_FORMAT, loadRegressionTreeModel } from './regression-tree'
+import {
+  GRADIENT_BOOSTING_FORMAT,
+  GRADIENT_BOOSTING_REGRESSION_FORMAT,
+  loadGradientBoostingModel,
+  loadGradientBoostingProba,
+  loadGradientBoostingRegressionModel,
+} from './gradient-boosting'
+import { DBSCAN_FORMAT, loadDbscanModel } from './dbscan'
 import type { LoadContext, ModelInterpreter, Predict, ProbaModel } from './types'
 
 export { KMEANS_FORMAT, kmeansPredict, loadKMeansModel, parseKMeansModel } from './kmeans'
@@ -49,8 +63,24 @@ export {
   parseNeuralRegression,
 } from './neural'
 export type { NeuralModel, NeuralRegressionModel, ParsedLayers, ParsedNeural } from './neural'
-export { REFERENCE_FORMAT, knnPredict } from './reference'
-export type { NeighborhoodInput, ReferenceModel } from './reference'
+export {
+  REFERENCE_FORMAT,
+  REFERENCE_REGRESSION_FORMAT,
+  knnPredict,
+  knnRegressionPredict,
+} from './reference'
+export type { NeighborhoodInput, ReferenceModel, ReferenceRegressionModel } from './reference'
+export { TREE_REGRESSION_FORMAT, regressionForestPredict } from './regression-tree'
+export type { RegressionNode, RegressionTreeModel } from './regression-tree'
+export {
+  GRADIENT_BOOSTING_FORMAT,
+  GRADIENT_BOOSTING_REGRESSION_FORMAT,
+  gradientBoostingPredict,
+  gradientBoostingRegressionPredict,
+} from './gradient-boosting'
+export type { GradientBoostingModel, GradientBoostingRegressionModel } from './gradient-boosting'
+export { DBSCAN_FORMAT, NOISE, dbscanPredict } from './dbscan'
+export type { DbscanModel } from './dbscan'
 export { SVM_FORMAT, svmPredict } from './svm'
 export type { PairwiseClassifier, SvmModel, VotingInput } from './svm'
 export { TREE_FORMAT } from './tree'
@@ -134,6 +164,41 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     includesPreprocessing: false,
     needsTrainingRows: false,
     load: loadKMeansModel,
+  },
+  {
+    // **결정트리·랜덤 포레스트의 회귀.** 잎이 수치이고 나무들을 평균한다 (§5.12).
+    format: TREE_REGRESSION_FORMAT,
+    includesPreprocessing: false,
+    needsTrainingRows: false,
+    load: loadRegressionTreeModel,
+  },
+  {
+    // **KNN 회귀.** 분류 형식처럼 행 번호만 담아 훈련 행이 있어야 한다 (§5.6.1).
+    format: REFERENCE_REGRESSION_FORMAT,
+    includesPreprocessing: false,
+    needsTrainingRows: true,
+    load: loadReferenceRegressionModel,
+  },
+  {
+    // **그레이디언트 부스팅 분류.** 점수가 로지스틱·softmax라 확률이 있다 (§5.13).
+    format: GRADIENT_BOOSTING_FORMAT,
+    includesPreprocessing: false,
+    needsTrainingRows: false,
+    load: loadGradientBoostingModel,
+    loadProba: loadGradientBoostingProba,
+  },
+  {
+    format: GRADIENT_BOOSTING_REGRESSION_FORMAT,
+    includesPreprocessing: false,
+    needsTrainingRows: false,
+    load: loadGradientBoostingRegressionModel,
+  },
+  {
+    // **DBSCAN은 핵심 점의 좌표를 담는다** — 훈련 행이 없어도 예측한다 (§5.14).
+    format: DBSCAN_FORMAT,
+    includesPreprocessing: false,
+    needsTrainingRows: false,
+    load: loadDbscanModel,
   },
 ]
 

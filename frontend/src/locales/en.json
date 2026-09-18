@@ -275,7 +275,9 @@
     "svm": "Support vector machine",
     "linear_regression": "Linear regression",
     "k_means": "K-means",
-    "neural_network": "Neural network"
+    "neural_network": "Neural network",
+    "gradient_boosting": "Gradient boosting",
+    "dbscan": "DBSCAN (density-based clustering)"
   },
   "runtimes": {
     "mljs": "ml.js · this computer",
@@ -298,7 +300,11 @@
     "n_estimators": "Number of trees (n_estimators)",
     "n_neighbors": "Number of neighbors (n_neighbors)",
     "max_iter": "Maximum iterations (max_iter)",
-    "n_clusters": "Number of clusters (n_clusters)"
+    "n_clusters": "Number of clusters (n_clusters)",
+    "learningRate": "Learning rate (learningRate)",
+    "learning_rate": "Learning rate (learning_rate)",
+    "eps": "Radius (eps)",
+    "minSamples": "Minimum neighbors (minSamples)"
   },
   "missingStrategy": {
     "none": "Leave blanks as they are",
@@ -670,6 +676,7 @@
     "NEURAL_REGRESSION_NOT_CONVERGED": "The loss was still going down when the epoch budget ran out. The scores are real, but the model has not finished learning. The loss curve on the results screen shows how much further it was heading. This notice is common when the target values are much larger than the feature values.",
     "TARGET_TOO_FEW_CLASSES": "The data used for training has only one target value, so the model had nothing to tell apart. A high score here does not mean it learned anything. On the preprocessing screen, choose a target column that has two or more values. ({value})",
     "TARGET_NO_VARIANCE": "Every target value in the training data is the same, so R-squared means nothing here. Judge by the errors (RMSE, MAE), or choose a target column whose values vary. ({value})",
+    "DBSCAN_NOISE": "{noise} rows are noise that belong to no cluster. The scores were computed without the noise. Increase [Radius (eps)] or lower [Minimum neighbors (minSamples)] for less noise, or do the opposite for tighter clusters. ({clusters} clusters found)",
     "KMEANS_NOT_CONVERGED": "The cluster centers had not settled within the allowed rounds. The clusters are real, but they have not converged yet. Turn on [Scaling] in the preprocess step, or lower [Number of clusters (nClusters)], and the centers settle sooner.",
     "DATASET_FILE_TYPE_UNSUPPORTED": "This file type is not supported. ({fileName})",
     "DATASET_SHEET_NOT_FOUND": "That sheet could not be found. ({sheetName})",
@@ -872,6 +879,7 @@
     "change": "{from} → {to}",
     "changeTitle": "Changed since the previous experiment",
     "clusterName": "Cluster {index}",
+    "noiseName": "Noise (in no cluster)",
     "confusion": "Confusion matrix",
     "confusionLead": "The labels down the left are the actual values, and the labels across the top are what the model predicted. Cells on the diagonal are the ones it got right; the rest show what was mistaken for what.",
     "detailFor": "Training result for {model}.",

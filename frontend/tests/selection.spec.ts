@@ -179,9 +179,9 @@ describe('화면만 하는 말', () => {
 
 describe('유형을 바꾸면 뜻을 잃는 모델', () => {
   it('분류로 바꾸면 회귀 전용 모델이 빠진다', () => {
-    const selected = [{ algorithm: 'decision_tree' }, { algorithm: 'linear_regression' }]
+    const selected = [{ algorithm: 'svm' }, { algorithm: 'linear_regression' }]
     expect(algorithmsLosingMeaning(selected, 'classification')).toEqual(['linear_regression'])
-    expect(algorithmsLosingMeaning(selected, 'regression')).toEqual(['decision_tree'])
+    expect(algorithmsLosingMeaning(selected, 'regression')).toEqual(['svm'])
   })
 
   it('실행 위치는 보지 않는다 - 서버가 꺼져 있다고 선택을 지우지 않는다', () => {
@@ -321,7 +321,7 @@ describe('세 축이 서로를 좁힌다', () => {
       options: algorithmOptions({ dataType: 'tabular', taskType: 'regression' }, OFFLINE),
       algorithm: 'linear_regression',
     })
-    expect(choice(algorithms, 'decision_tree')?.reason).toBe('ALGORITHM_NOT_FOR_TASK_TYPE')
+    expect(choice(algorithms, 'svm')?.reason).toBe('ALGORITHM_NOT_FOR_TASK_TYPE')
     expect(choice(algorithms, 'linear_regression')?.enabled).toBe(true)
   })
 

@@ -74,76 +74,12 @@ function worse(distanceA: number, indexA: number, distanceB: number, indexB: num
  * `KNeighborsClassifier`와 같은 답이다 (mlpx-spec.md 5.6, 2026-08-10에 바꿨다).
  */
 export function knnPredict(input: NeighborhoodInput): Predict {
-  const { k, featureCount, rows, labels, indices } = input
-  if (!Number.isInteger(k) || k <= 0) invalid('k')
-  if (rows.length === 0) invalid('trainIndices')
-  if (labels.length !== rows.length || indices.length !== rows.length) invalid('trainIndices')
-
-  const matrix = rows.map((row) => {
-    if (row.length !== featureCount) invalid('featureCount')
-    return Float64Array.from(row)
-  })
-  // 이웃 수가 훈련 행보다 많을 수는 없다. 있는 만큼만 본다.
-  const neighbors = Math.min(k, matrix.length)
+  const { labels, indices } = input
+  const nearest = neighborSearch(input)
 
   return (features) =>
     features.map((query) => {
-      if (query.length !== featureCount) invalid('featureCount')
-
-      // 크기 k의 최대 힙. 꼭대기가 **지금 뽑아 둔 것 중 가장 나쁜 이웃**이다.
-      const heapDistance = new Float64Array(neighbors)
-      const heapRow = new Int32Array(neighbors)
-      let size = 0
-
-      const swap = (a: number, b: number): void => {
-        const distance = heapDistance[a] ?? 0
-        heapDistance[a] = heapDistance[b] ?? 0
-        heapDistance[b] = distance
-        const row = heapRow[a] ?? 0
-        heapRow[a] = heapRow[b] ?? 0
-        heapRow[b] = row
-      }
-
-      const worseAt = (a: number, b: number): boolean =>
-        worse(heapDistance[a] ?? 0, heapRow[a] ?? 0, heapDistance[b] ?? 0, heapRow[b] ?? 0)
-
-      matrix.forEach((row, position) => {
-        let distance = 0
-        for (let column = 0; column < featureCount; column += 1) {
-          const gap = (query[column] ?? 0) - (row[column] ?? 0)
-          distance += gap * gap
-        }
-        const rowIndex = indices[position] ?? 0
-
-        if (size < neighbors) {
-          let child = size
-          size += 1
-          heapDistance[child] = distance
-          heapRow[child] = rowIndex
-          while (child > 0) {
-            const parent = (child - 1) >> 1
-            if (!worseAt(child, parent)) break
-            swap(child, parent)
-            child = parent
-          }
-          return
-        }
-
-        if (!worse(heapDistance[0] ?? 0, heapRow[0] ?? 0, distance, rowIndex)) return
-        heapDistance[0] = distance
-        heapRow[0] = rowIndex
-        let parent = 0
-        for (;;) {
-          const left = parent * 2 + 1
-          const right = left + 1
-          let worst = parent
-          if (left < size && worseAt(left, worst)) worst = left
-          if (right < size && worseAt(right, worst)) worst = right
-          if (worst === parent) break
-          swap(parent, worst)
-          parent = worst
-        }
-      })
+      const { heapRow, size } = nearest(query)
 
       // 클래스마다 개수. 순서는 필요 없다.
       const byLabel = new Map<string, number>()
@@ -170,6 +106,122 @@ export function knnPredict(input: NeighborhoodInput): Predict {
       if (best === undefined) invalid('trainIndices')
       return best
     })
+}
+
+/**
+ * KNN 회귀 (mlpx-spec.md §5.6.1). **이웃 k개의 타깃 평균이다** — sklearn
+ * `KNeighborsRegressor(weights='uniform')`과 같은 식이다.
+ *
+ * **이웃을 고르는 규칙은 분류와 같은 함수다**(`neighborSearch`). 거리 동점을 행 번호로
+ * 가르는 규칙 1이 그대로 걸린다 — 갈리는 것은 고른 뒤 투표하느냐 평균하느냐뿐이다.
+ *
+ * `labels`에는 **수치를 적은 문자열**이 온다. 파일에서 읽은 훈련 행의 타깃이 문자열이기
+ * 때문이다(`LoadContext`). 숫자로 못 읽는 값이 있으면 깨진 입력이다.
+ */
+export function knnRegressionPredict(input: NeighborhoodInput): Predict {
+  const { labels, indices } = input
+  const nearest = neighborSearch(input)
+  const rowToValue = new Map<number, number>()
+  indices.forEach((rowIndex, position) => {
+    const value = Number(labels[position])
+    if (!Number.isFinite(value)) invalid('target')
+    rowToValue.set(rowIndex, value)
+  })
+
+  return (features) =>
+    features.map((query) => {
+      const { heapRow, size } = nearest(query)
+      let sum = 0
+      for (let slot = 0; slot < size; slot += 1) {
+        const value = rowToValue.get(heapRow[slot] ?? 0)
+        if (value === undefined) invalid('trainIndices')
+        sum += value
+      }
+      if (size === 0) invalid('trainIndices')
+      return sum / size
+    })
+}
+
+/**
+ * 질의 하나의 이웃 k개를 고르는 함수를 만든다. **분류와 회귀가 이것 하나를 쓴다.**
+ *
+ * 돌려주는 힙은 **차례가 없다** — 필요한 것은 어느 행이 뽑혔는지이지 그 안의 순서가 아니다.
+ */
+function neighborSearch(
+  input: NeighborhoodInput,
+): (query: readonly number[]) => { heapRow: Int32Array; size: number } {
+  const { k, featureCount, rows, labels, indices } = input
+  if (!Number.isInteger(k) || k <= 0) invalid('k')
+  if (rows.length === 0) invalid('trainIndices')
+  if (labels.length !== rows.length || indices.length !== rows.length) invalid('trainIndices')
+
+  const matrix = rows.map((row) => {
+    if (row.length !== featureCount) invalid('featureCount')
+    return Float64Array.from(row)
+  })
+  // 이웃 수가 훈련 행보다 많을 수는 없다. 있는 만큼만 본다.
+  const neighbors = Math.min(k, matrix.length)
+
+  return (query) => {
+    if (query.length !== featureCount) invalid('featureCount')
+
+    // 크기 k의 최대 힙. 꼭대기가 **지금 뽑아 둔 것 중 가장 나쁜 이웃**이다.
+    const heapDistance = new Float64Array(neighbors)
+    const heapRow = new Int32Array(neighbors)
+    let size = 0
+
+    const swap = (a: number, b: number): void => {
+      const distance = heapDistance[a] ?? 0
+      heapDistance[a] = heapDistance[b] ?? 0
+      heapDistance[b] = distance
+      const row = heapRow[a] ?? 0
+      heapRow[a] = heapRow[b] ?? 0
+      heapRow[b] = row
+    }
+
+    const worseAt = (a: number, b: number): boolean =>
+      worse(heapDistance[a] ?? 0, heapRow[a] ?? 0, heapDistance[b] ?? 0, heapRow[b] ?? 0)
+
+    matrix.forEach((row, position) => {
+      let distance = 0
+      for (let column = 0; column < featureCount; column += 1) {
+        const gap = (query[column] ?? 0) - (row[column] ?? 0)
+        distance += gap * gap
+      }
+      const rowIndex = indices[position] ?? 0
+
+      if (size < neighbors) {
+        let child = size
+        size += 1
+        heapDistance[child] = distance
+        heapRow[child] = rowIndex
+        while (child > 0) {
+          const parent = (child - 1) >> 1
+          if (!worseAt(child, parent)) break
+          swap(child, parent)
+          child = parent
+        }
+        return
+      }
+
+      if (!worse(heapDistance[0] ?? 0, heapRow[0] ?? 0, distance, rowIndex)) return
+      heapDistance[0] = distance
+      heapRow[0] = rowIndex
+      let parent = 0
+      for (;;) {
+        const left = parent * 2 + 1
+        const right = left + 1
+        let worst = parent
+        if (left < size && worseAt(left, worst)) worst = left
+        if (right < size && worseAt(right, worst)) worst = right
+        if (worst === parent) break
+        swap(parent, worst)
+        parent = worst
+      }
+    })
+
+    return { heapRow, size }
+  }
 }
 
 /**
@@ -209,4 +261,59 @@ export function loadReferenceModel(file: unknown, context: LoadContext): Predict
   }
 
   return knnPredict({ k, featureCount, rows, labels, indices })
+}
+
+/**
+ * `mlpx-reference-regression-v1` — KNN 회귀 (mlpx-spec.md §5.6.1).
+ *
+ * **분류 형식과 갈린다.** 담는 것은 같지만(행 번호) `classes`가 없고 답이 수치다 —
+ * 인공신경망과 나무가 회귀 형식을 따로 둔 것과 같은 판단이다.
+ */
+export const REFERENCE_REGRESSION_FORMAT = 'mlpx-reference-regression-v1'
+
+export interface ReferenceRegressionModel extends ModelFile {
+  readonly format: typeof REFERENCE_REGRESSION_FORMAT
+  readonly k: number
+  readonly featureCount: number
+  readonly trainIndices: readonly number[]
+}
+
+const referenceRegressionSchema = z.looseObject({
+  format: z.literal(REFERENCE_REGRESSION_FORMAT),
+  k: z.number(),
+  featureCount: z.number(),
+  trainIndices: z.array(z.number()).min(1),
+})
+
+/** 파일을 예측 함수로. 분류 형식과 같이 **원본 훈련 행이 있어야 한다.** */
+export function loadReferenceRegressionModel(file: unknown, context: LoadContext): Predict {
+  const parsed = referenceRegressionSchema.safeParse(file)
+  if (!parsed.success) invalid('payload')
+
+  const { k, featureCount, trainIndices } = parsed.data
+  if (!Number.isInteger(featureCount) || featureCount <= 0) invalid('featureCount')
+
+  const training = context.trainingRows
+  if (!training) {
+    throw new ClientError('MODEL_NEEDS_DATASET', { format: REFERENCE_REGRESSION_FORMAT })
+  }
+
+  const known = new Map<number, number>()
+  training.indices.forEach((rowIndex, position) => known.set(rowIndex, position))
+
+  const rows: (readonly number[])[] = []
+  const labels: string[] = []
+  const indices: number[] = []
+  for (const rowIndex of trainIndices) {
+    const position = known.get(rowIndex)
+    if (position === undefined) invalid('trainIndices')
+    const row = training.features[position]
+    const label = training.target[position]
+    if (row === undefined || label === undefined) invalid('trainIndices')
+    rows.push(row)
+    labels.push(label)
+    indices.push(rowIndex)
+  }
+
+  return knnRegressionPredict({ k, featureCount, rows, labels, indices })
 }

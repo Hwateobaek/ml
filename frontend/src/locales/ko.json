@@ -275,7 +275,9 @@
     "svm": "서포트 벡터 머신(SVM)",
     "linear_regression": "선형 회귀(Linear Regression)",
     "k_means": "K-평균(K-Means)",
-    "neural_network": "인공신경망(Neural Network)"
+    "neural_network": "인공신경망(Neural Network)",
+    "gradient_boosting": "그레이디언트 부스팅(Gradient Boosting)",
+    "dbscan": "DBSCAN(밀도 기반 군집)"
   },
   "runtimes": {
     "mljs": "ml.js · 내 컴퓨터",
@@ -298,7 +300,11 @@
     "n_estimators": "나무 개수(n_estimators)",
     "n_neighbors": "이웃 수(n_neighbors)",
     "max_iter": "최대 반복 횟수(max_iter)",
-    "n_clusters": "군집 수(n_clusters)"
+    "n_clusters": "군집 수(n_clusters)",
+    "learningRate": "학습률(learningRate)",
+    "learning_rate": "학습률(learning_rate)",
+    "eps": "반경(eps)",
+    "minSamples": "최소 이웃 수(minSamples)"
   },
   "missingStrategy": {
     "none": "결측치 유지하기",
@@ -670,6 +676,7 @@
     "NEURAL_REGRESSION_NOT_CONVERGED": "정해진 학습 횟수(에폭) 안에 손실이 더 줄어들지 않는 지점까지 가지 못했습니다. 점수는 나왔지만 아직 덜 배운 모델입니다. 결과 화면의 손실 곡선을 보면 얼마나 더 내려갈 참이었는지 알 수 있습니다. 타깃(Target) 값의 크기가 특성(Feature)보다 훨씬 크면 이 안내가 자주 나옵니다.",
     "TARGET_TOO_FEW_CLASSES": "학습에 쓴 데이터의 타깃(Target)이 한 종류뿐이라 모델이 갈라 볼 것이 없습니다. 점수가 높게 나와도 아무것도 배우지 않은 것입니다. 전처리 화면에서 값이 두 종류 이상인 열을 타깃으로 선택해 주세요. ({value})",
     "TARGET_NO_VARIANCE": "학습에 쓴 데이터의 타깃(Target) 값이 모두 같아 결정계수(R-squared)가 뜻을 잃습니다. 오차(RMSE·MAE)로 판단하거나, 값이 변하는 열을 타깃으로 선택해 주세요. ({value})",
+    "DBSCAN_NOISE": "어느 군집에도 속하지 않는 잡음(Noise) 데이터가 {noise}개 있습니다. 점수는 잡음을 뺀 데이터로 계산했습니다. 반경(eps)을 늘리거나 최소 이웃 수(minSamples)를 줄이면 잡음이 줄고, 반대로 하면 군집이 더 촘촘해집니다. (찾은 군집 {clusters}개)",
     "KMEANS_NOT_CONVERGED": "정해진 횟수 안에 중심점이 제자리를 잡지 못했습니다. 군집은 나왔지만 아직 수렴(Convergence)하지 않은 상태입니다. 전처리에서 [스케일링(Scaling)]을 켜거나 [군집 수(nClusters)]를 줄이면 중심점이 더 빨리 자리를 잡습니다.",
     "DATASET_FILE_TYPE_UNSUPPORTED": "지원하지 않는 파일 형식입니다. ({fileName})",
     "DATASET_SHEET_NOT_FOUND": "그 시트를 찾을 수 없습니다. ({sheetName})",
@@ -872,6 +879,7 @@
     "change": "{from} → {to}",
     "changeTitle": "직전 실험에서 바뀐 것",
     "clusterName": "{index}번 군집",
+    "noiseName": "잡음(어느 군집에도 속하지 않음)",
     "confusion": "혼동 행렬(Confusion Matrix)",
     "confusionLead": "왼쪽에 적힌 것이 실제 값이고, 위에 적힌 것이 모델이 예측한 값입니다. 대각선 칸이 맞힌 것이고, 나머지 칸은 무엇을 무엇으로 잘못 봤는지 보여 줍니다.",
     "detailFor": "{model}의 학습 결과입니다.",
