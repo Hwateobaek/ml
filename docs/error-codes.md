@@ -331,6 +331,15 @@ NEURAL_REGRESSION_NOT_CONVERGED
 다섯 다 "반복 예산 안에 멈추지 못했다"이고 sklearn이 `ConvergenceWarning`을 내는
 자리다. 지표도 모델도 나온다 — 덜 다듬어졌다는 사실 하나가 덧붙는다.
 
+**DBSCAN의 잡음** (`ml/engines/mljs.ts`의 dbscan 트레이너, 2026-09-18)
+```
+DBSCAN_NOISE
+```
+
+어느 무리에도 안 든 점(`-1`)이 있거나 무리를 둘 이상 못 찾았다. **수렴의 문제가 아니라
+이 알고리즘의 정상 결과**이고, 지표는 잡음을 뺀 점으로 낸다 (`open-decisions.md`
+"DBSCAN을 넣는다"). 학생이 할 일은 반경과 최소 이웃 수를 바꿔 보는 것이다.
+
 **여섯째는 모델이 아니라 데이터를 말한다** (`ml/experiment.ts`, 2026-09-03)
 ```
 TARGET_TOO_FEW_CLASSES

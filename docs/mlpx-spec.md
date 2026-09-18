@@ -46,11 +46,15 @@
   - 5.4.1 mlpx-linear-v2 — 절편이 있고, 높은 점수가 이긴다 (2026-08-10)
   - 5.5 mlpx-naive-bayes-v1 — 가우시안 나이브 베이즈 (2026-08-06)
   - 5.6 mlpx-reference-v1 — KNN (2026-08-06)
+  - 5.6.1 mlpx-reference-regression-v1 — KNN 회귀 (2026-09-18)
   - 5.7 mlpx-linear-regression-v1 — 선형 회귀 (2026-08-06)
   - 5.8 mlpx-svm-v1 — 선형 서포트 벡터 머신 (2026-08-06)
   - 5.9 수렴하지 못한 학습은 실패가 아니다 — run.warning (2026-08-06)
   - 5.10 mlpx-kmeans-v1 — K-평균 (V3, 2026-08-11)
   - 5.11 mlpx-neural-v1 · mlpx-neural-regression-v1 — 다층 퍼셉트론 (2026-09-03)
+  - 5.12 mlpx-tree-regression-v1 — 결정트리·랜덤 포레스트 회귀 (2026-09-18)
+  - 5.13 mlpx-gradient-boosting-v1 · mlpx-gradient-boosting-regression-v1 — 그레이디언트 부스팅 (2026-09-18)
+  - 5.14 mlpx-dbscan-v1 — DBSCAN (2026-09-18)
 
 ### 인적사항과 무결성 (§6~§7)
 

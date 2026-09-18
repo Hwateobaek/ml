@@ -18,6 +18,10 @@
 | `mlpx-svm-v1` | **선형 SVM** | 밖 | 모델 + preprocessor |
 | `mlpx-linear-regression-v1` | 선형 회귀 (§5.7) | 밖 | 모델 + preprocessor |
 | `mlpx-kmeans-v1` | **K-평균** (§5.10) | 밖 | 모델 + preprocessor |
+| `mlpx-tree-regression-v1` | 결정트리·랜덤 포레스트 회귀 (§5.12) | 밖 | 모델 + preprocessor |
+| `mlpx-reference-regression-v1` | **KNN 회귀** (§5.6.1) | 밖 | 모델 + preprocessor + **`dataset/`** |
+| `mlpx-gradient-boosting-v1` · `-regression-v1` | 그레이디언트 부스팅 (§5.13) | 밖 | 모델 + preprocessor |
+| `mlpx-dbscan-v1` | **DBSCAN** (§5.14) | 밖 | 모델 + preprocessor |
 | `onnx-v1` | 딥러닝이 들어온 뒤 | **그래프에 포함** | 모델 하나 |
 
 > **SVM은 이 표에서 KNN과 같은 칸에 있었고, 그게 틀렸다** (2026-08-06). 훈련 행을 들고
@@ -409,6 +413,17 @@ KNN은 훈련 데이터 전체라 결과적으로 같아 보일 뿐)이고, 실�
 득표 집계에는 이웃의 순서가 필요 없다. 클래스마다 **개수**만 들고 있으면 규칙 2~3이
 그대로 계산된다.
 
+### 5.6.1 `mlpx-reference-regression-v1` — KNN 회귀 (2026-09-18)
+
+```json
+{ "format": "mlpx-reference-regression-v1", "k": 5, "featureCount": 4, "trainIndices": [0, 3, 7] }
+```
+
+**§5.6과 담는 것이 같다** — 행 번호뿐이라 `needsTrainingRows`가 참이다. `classes`가 없고
+답이 **이웃 k개 타깃의 평균**이다(sklearn `KNeighborsRegressor(weights='uniform')`).
+이웃을 고르는 규칙은 §5.6의 규칙 1 그대로다 — 코드도 같은 함수를 쓴다(`neighborSearch`).
+훈련 행의 타깃은 문자열로 오고(§5.0) 숫자로 못 읽으면 깨진 입력이다.
+
 ### 5.7 `mlpx-linear-regression-v1` — 선형 회귀 (2026-08-06)
 
 ```jsonc
@@ -629,5 +644,55 @@ KNN(§5.6)과 갈리는 자리가 여기다 — 같은 "거리로 답하는" 모
 
 **3번이 이 형식에서 가장 중요한 불변식이다.** 층의 모양이 어긋난 파일을 그냥 흘리면
 예측 루프가 `undefined`를 곱해 **NaN을 답으로 낸다** — 예외도 없이 화면에 뜬다.
+
+### 5.12 `mlpx-tree-regression-v1` — 결정트리·랜덤 포레스트 회귀 (2026-09-18)
+
+```json
+{ "format": "mlpx-tree-regression-v1", "featureCount": 4,
+  "trees": [{ "nodes": [[2, 0.5, 1, 2], [-1, 10.0, -1, -1], [-1, 30.0, -1, -1]] }] }
+```
+
+**§5.3과 모양이 같고 뜻이 셋 다르다.** 잎 `[-1, 값, -1, -1]`의 둘째 칸이 클래스 번호가 아니라
+**수치**이고, 여러 그루를 묶는 규칙이 다수결이 아니라 **평균**이며, **`x <= 임계값`이면
+왼쪽**이다(sklearn `tree_.threshold`와 같은 방향 — §5.3은 `<`). 결정트리는 한 그루짜리 숲이다.
+
+검증은 §5.3과 같다 — 자식은 자기보다 뒤에 있어야 하고(순환이 구조적으로 막힌다), 값은
+유한해야 하고, 열 번호는 `featureCount` 안이어야 한다. 입력 폭이 다르면 거부한다.
+
+### 5.13 `mlpx-gradient-boosting-v1` · `mlpx-gradient-boosting-regression-v1` — 그레이디언트 부스팅 (2026-09-18)
+
+```json
+{ "format": "mlpx-gradient-boosting-v1", "classes": ["a", "b", "c"], "featureCount": 4,
+  "learningRate": 0.1, "init": [0.1, -0.2, 0.1],
+  "stages": [[{ "nodes": [[-1, 0.3, -1, -1]] }, { "nodes": [[-1, -0.1, -1, -1]] },
+              { "nodes": [[-1, 0.0, -1, -1]] }]] }
+```
+
+점수 = `init + learningRate × Σ 나무의 값`. 나무 한 그루는 §5.12의 나무와 같은 규칙으로 걷는다.
+
+- **분류**: 점수 칸이 **이진이면 하나**(`log(p/(1−p))`, 0보다 크면 `classes[1]`), **다중이면
+  클래스 수만큼**(가장 큰 칸, 동점이면 앞 칸). `stages[m]`의 길이가 칸 수와 같아야 한다.
+  확률은 이진이면 로지스틱, 다중이면 softmax이고 칸 순서는 `classes`다(§5.4) — **라벨과
+  확률이 같은 점수에서 나온다.**
+- **회귀**: `init`이 수 하나, `stages`가 나무의 배열이다. `classes`가 없고 확률도 없다 —
+  §5.11이 회귀 형식을 가른 것과 같은 판단이다.
+
+### 5.14 `mlpx-dbscan-v1` — DBSCAN (2026-09-18)
+
+```json
+{ "format": "mlpx-dbscan-v1", "featureCount": 2, "eps": 0.5, "clusterCount": 2,
+  "cores": [[0, 0], [5, 5]], "coreLabels": [0, 1] }
+```
+
+**sklearn의 `DBSCAN`에는 `predict`가 없다.** 이 형식은 새 점에 DBSCAN의 정의를 그대로
+건다 — 반경(`eps`, 이 거리 **이하**) 안에 핵심 점이 있으면 **가장 가까운 핵심 점**의
+무리이고(동점이면 앞의 핵심 점), 없으면 **`-1`(잡음)**이다. 답은 K-평균과 같이 문자열 번호다.
+
+**핵심 점의 좌표를 담는다** — 행 번호가 아니다. 그래서 `dataset/`이 없는 파일에서도 예측이
+되고 `needsTrainingRows`가 거짓이다. `coreLabels`는 0부터 `clusterCount − 1`까지여야 한다.
+
+**학습의 경계 점 규칙과 한 곳이 다르다** — 학습에서 경계 점은 먼저 닿은 무리에 붙고, 여기서는
+가장 가까운 핵심 점을 따른다. 두 무리의 반경에 함께 드는 경계 점 하나를 다시 넣으면 다른
+번호가 나올 수 있다. 핵심 점과 잡음은 언제나 같다.
 
 ---
