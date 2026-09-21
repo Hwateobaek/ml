@@ -293,7 +293,7 @@ describe('상한은 전부 읽힌다', () => {
 
 /**
  * **화면과 상한을 잇는 줄이 끊겨도 아무것도 안 울었다** (V11 R5 B-4).
- * `CLUSTER_SCATTER_POINT_LIMIT`에는 근거가 촘촘히 붙어 있다 — 개발 PC 실측, 감사자의
+ * `SCATTER_POINT_LIMIT`에는 근거가 촘촘히 붙어 있다 — 개발 PC 실측, 감사자의
  * 독립 재측정, `animation: false`가 화면에 실제로 있어야 그 숫자가 화면의 숫자라는 못까지.
  * 그런데 `clusters.spec.ts`는 `scatterPoints`를 **인자로 받은 상한**으로 검사하므로,
  * 화면이 그 상수를 안 넘겨도 초록이다.
@@ -304,15 +304,23 @@ describe('상한은 전부 읽힌다', () => {
  * 고른 조율 상수에까지 그것을 하지는 않는다 — 근거는 그 상수의 주석이 갖는다.
  */
 describe('산점도 상한이 화면까지 이어진다', () => {
-  // 정의한 파일은 부르는 쪽이 아니다 - 상한을 인자로 받는 것이 그 함수의 계약이다.
+  /**
+   * **점을 뽑는 문이 둘이다** — 군집 산점도(`scatterPoints`)와 회귀선 그림
+   * (`regressionChartFor`). 둘 다 상한을 인자로 받으므로 화면이 그 값을 넘겨야 줄이
+   * 이어진다. 정의한 파일은 부르는 쪽이 아니다.
+   */
+  const GATES = ['scatterPoints(', 'regressionChartFor(']
   const CALLERS = scanned(SRC).filter((path) => {
     const source = readFileSync(path, 'utf-8')
-    return source.includes('scatterPoints(') && !source.includes('export function scatterPoints')
+    return (
+      GATES.some((gate) => source.includes(gate)) &&
+      !/export function (scatterPoints|regressionChartFor)/.test(source)
+    )
   })
 
   it('부르는 화면을 실제로 찾는다', () => {
     // 0개면 이름이 바뀐 것이지 규칙이 지켜진 게 아니다.
-    expect(CALLERS.length).toBeGreaterThanOrEqual(2)
+    expect(CALLERS.length).toBeGreaterThanOrEqual(3)
   })
 
   /**
@@ -328,15 +336,15 @@ describe('산점도 상한이 화면까지 이어진다', () => {
 
   /**
    * **스위치를 거친 이름도 같은 줄이다** (2026-09-01). 화면은 이제 상수를 직접 안 읽고
-   * `clusterScatterPointLimit()`을 부른다 — 그 함수가 `limits-switch.ts`에서 이 상수를
+   * `scatterPointLimit()`을 부른다 — 그 함수가 `limits-switch.ts`에서 이 상수를
    * 읽으므로 줄은 그대로 이어져 있고, **끊긴 것과 거쳐 간 것을 여기서 갈라야 한다.**
    * 상수 이름만 보던 이 검사는 그 이사에서 울었고, 그것이 이 검사가 하는 일이다.
    */
   it('상한을 손으로 안 적고 상수를 넘긴다', () => {
     const missing = CALLERS.filter(
       (path) =>
-        !bodyOf(path).includes('CLUSTER_SCATTER_POINT_LIMIT') &&
-        !bodyOf(path).includes('clusterScatterPointLimit('),
+        !bodyOf(path).includes('SCATTER_POINT_LIMIT') &&
+        !bodyOf(path).includes('scatterPointLimit('),
     ).map((path) => path.slice(SRC.length + 1))
     expect(missing, 'calls scatterPoints without passing the constant').toEqual([])
   })

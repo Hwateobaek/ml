@@ -29,7 +29,6 @@ import {
   matrixColumns,
   nearestMembers,
   scatterPoints,
-  unscale,
   type ClusterAxis,
 } from '../src/ml/clusters'
 import { fitKMeans } from '../src/ml/engines/mljs-kmeans'
@@ -37,6 +36,7 @@ import { KMEANS_FORMAT, kmeansPredict, type KMeansModel } from '../src/ml/models
 import {
   fitPreprocessor,
   transform,
+  unscale,
   usableRows,
   type Dataset,
   type Preprocessor,

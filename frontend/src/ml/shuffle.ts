@@ -1,5 +1,5 @@
 /**
- * 씨앗이 있는 섞기. **`ml/split.ts`와 `ml/sample.ts`가 함께 쓴다.**
+ * 씨앗이 있는 섞기. **`ml/split.ts`·`ml/sample.ts`와 산점도 둘이 함께 쓴다.**
  *
  * 두 곳으로 갈라 두지 않는 이유는 **같은 씨앗에서 같은 순서가 나와야 하기 때문**이다
  * (`open-decisions.md` #22 — 씨앗은 `split.randomState` 하나다). 셔플 구현이 둘이 되면
@@ -30,6 +30,34 @@ export function shuffled(values: readonly number[], seed: number): number[] {
     out[j] = swap
   }
   return out
+}
+
+/**
+ * `count`개 중 `size`개를 시드로 뽑는다. **오름차순으로 돌려준다.**
+ *
+ * 부분 Fisher-Yates다 — 앞에서부터 `size`번만 섞으면 전체를 섞을 필요가 없다.
+ * `Math.random`을 쓰면 시드를 줄 수 없어 **같은 설정이 같은 그림을 못 준다.**
+ *
+ * **그림 둘이 함께 쓴다** — 군집 산점도(`ml/clusters.ts`)와 회귀선 그림
+ * (`ml/regression-line.ts`)이고, 둘 다 `split.randomState`를 씨앗으로 넘긴다.
+ * 여기로 옮기기 전에는 군집 쪽 파일 안에 있었다(2026-09-21).
+ *
+ * **오름차순으로 되돌리는 이유**는 그리는 차례가 겹침의 위아래를 정하기 때문이다 —
+ * 그것이 표본 뽑기의 부산물로 흔들릴 이유가 없다.
+ */
+export function sampledIndices(count: number, size: number, seed: number): number[] {
+  const pool = Array.from({ length: count }, (_value, index) => index)
+  const rng = xoroshiro128plus(seed)
+  const take = Math.min(size, count)
+
+  for (let i = 0; i < take; i += 1) {
+    const j = uniformInt(rng, i, count - 1)
+    const swap = pool[i] as number
+    pool[i] = pool[j] as number
+    pool[j] = swap
+  }
+
+  return pool.slice(0, take).sort((a, b) => a - b)
 }
 
 /**

@@ -25,6 +25,7 @@ import { supports, type Axis } from './axes'
 import { showsLossCurve } from './loss-curve'
 import { showsParameters } from './parameters'
 import type { Dataset, Preprocessor } from './preprocess'
+import { showsRegressionLine } from './regression-line'
 
 /**
  * 패널이 받는 것 전부. **모든 패널이 같은 것을 받고, 안 쓰는 패널은 안 쓴다.**
@@ -104,6 +105,25 @@ const PANELS: readonly MetricPanel[] = [
     // 담길 수 있고(옛 파일), 우리가 읽을 수 있는지는 형식이 답한다.
     hasData: (run) => showsParameters(run.model?.format),
     panel: defineAsyncComponent(() => import('@/views/results/panels/ParameterPanel.vue')),
+  },
+  {
+    /**
+     * **회귀선 그림** (`open-decisions.md` "선형 회귀는 회귀선을 그린다").
+     *
+     * **계수 표 바로 아래다.** 위의 식이 글자로 말한 것을 이 그림이 한 번 더 말하므로,
+     * 앞에 두면 학생이 아직 못 본 식을 가리키게 된다.
+     *
+     * **회귀에서만, 표 데이터에서만이다.** 가로축에 설 것이 학생의 열이어야 하고
+     * (사진의 `emb_0`에는 뜻이 없다), 세로축에 설 것이 수치 타깃이어야 한다.
+     */
+    id: 'regression-line',
+    dataTypes: { tabular: true, image: false },
+    taskTypes: { classification: false, regression: true, clustering: false },
+    // **형식으로 판정한다** — 계수 표와 같은 규칙이다. 그림의 재료는 모델 바이트와
+    // 데이터셋과 전처리기인데, 뒤의 둘은 run이 아니라 파일에 달린 사실이라 등록부가
+    // 답할 수 없다. 그때는 패널이 자기 자리에서 아무것도 안 그린다 (§9.5).
+    hasData: (run) => showsRegressionLine(run.model?.format),
+    panel: defineAsyncComponent(() => import('@/views/results/panels/RegressionLinePanel.vue')),
   },
   {
     /**

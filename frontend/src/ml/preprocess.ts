@@ -85,7 +85,14 @@ function isMissing(cell: string | undefined): boolean {
   return cell === undefined || cell.trim() === ''
 }
 
-function toNumber(cell: string): number | null {
+/**
+ * 칸 하나를 수로 읽는다. **못 읽으면 `null`이다** — 빈 칸도 여기서 `null`이다.
+ *
+ * **`Number()`를 그대로 쓰지 마라.** 빈 문자열이 `0`이 되고, 그러면 결측이 값으로
+ * 둔갑한다. 열의 종류를 정하는 것도(`detectKind`) 그림이 타깃을 읽는 것도
+ * (`ml/regression-line.ts`) 같은 규칙이어야 한다.
+ */
+export function toNumber(cell: string): number | null {
   const trimmed = cell.trim()
   if (trimmed === '') return null
   const value = Number(trimmed)
@@ -517,6 +524,22 @@ export function transform(
 
     return values
   })
+}
+
+/**
+ * 전처리된 값을 원래 단위로 되돌린다. **`transform`의 되돌리기이고, 스케일링이 꺼져
+ * 있으면 항등이다.**
+ *
+ * 되돌리기가 열마다 1차식(`값 × spread + center`)이라는 것이 `open-decisions.md` #28-6의
+ * 두 문장을 함께 떠받친다 — 되돌린 중심점이 곧 원래 단위의 평균이라는 것, 그리고
+ * 되돌리든 안 되돌리든 산점도의 배치가 같다는 것.
+ *
+ * **그림마다 한 벌씩 두지 않는다.** 군집 산점도와 회귀선 그림이 같은 것을 쓰고, 이
+ * 파일이 스케일을 **거는** 자리라 되돌리는 자리도 여기다(2026-09-21에 `ml/clusters.ts`
+ * 에서 옮겼다).
+ */
+export function unscale(column: FittedColumn, value: number): number {
+  return column.scale ? value * column.scale.spread + column.scale.center : value
 }
 
 /** 타깃 열의 값을 그대로 뽑는다. 라벨은 문자열로 다룬다 - 3과 "3"을 가르지 않는다. */

@@ -28,7 +28,7 @@ import { ref } from 'vue'
 import { readLimitsOff, writeLimitsOff } from './project/storage'
 
 import {
-  CLUSTER_SCATTER_POINT_LIMIT,
+  SCATTER_POINT_LIMIT,
   IMAGE_PREDICT_PAGE_SIZE,
   MAX_DATASET_COLUMNS,
   MAX_DATASET_ROWS,
@@ -130,9 +130,12 @@ export function imagePredictPageSize(): number {
   return open(IMAGE_PREDICT_PAGE_SIZE)
 }
 
-/** 산점도에 그릴 점의 수. 넘으면 표본을 뽑는다 (`ml/clusters.ts`의 `scatterPoints`). */
-export function clusterScatterPointLimit(): number {
-  return open(CLUSTER_SCATTER_POINT_LIMIT)
+/**
+ * 산점도에 그릴 점의 수. 넘으면 표본을 뽑는다 — 군집 산점도(`ml/clusters.ts`의
+ * `scatterPoints`)와 회귀선 그림(`ml/regression-line.ts`)이 같은 상한을 쓴다.
+ */
+export function scatterPointLimit(): number {
+  return open(SCATTER_POINT_LIMIT)
 }
 
 /**

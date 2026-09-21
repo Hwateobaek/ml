@@ -687,7 +687,11 @@ export const TABLE_PREVIEW_ROW_COUNT = 20
 export const PREP_PREVIEW_ROW_COUNT = 5
 
 /**
- * 군집 산점도에 찍는 점의 최대 개수 (open-decisions.md #28-5).
+ * 산점도에 찍는 점의 최대 개수 (open-decisions.md #28-5).
+ *
+ * **그림 둘이 나눠 쓴다** — 군집 산점도와 회귀선 그림이다 (`open-decisions.md` "선형
+ * 회귀는 회귀선을 그린다"). 근거가 같은 실측이고 같은 `animation: false`라 값이 둘일
+ * 이유가 없다. 이름에서 `CLUSTER_`를 떼어 낸 것이 그 사실이다.
  *
  * **쟀다 (2026-08-11).** 개발 PC · Chromium · 캔버스 800×420 · 군집 5개 ·
  * **`animation: false`**다. 그 옵션이 화면에 실제로 있어야 이 숫자가 화면의 숫자다 —
@@ -711,7 +715,7 @@ export const PREP_PREVIEW_ROW_COUNT = 5
  *
  * **분류: 우리 기기가 정했다.**
  */
-export const CLUSTER_SCATTER_POINT_LIMIT = 10_000
+export const SCATTER_POINT_LIMIT = 10_000
 
 /**
  * 군집 구성원 표의 **한 페이지** 줄 수 (open-decisions.md #28-6).

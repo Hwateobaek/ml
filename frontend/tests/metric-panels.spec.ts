@@ -40,6 +40,17 @@ const classified = run({
   perClass: [{ label: 'a', precision: 1, recall: 1, f1: 1, support: 1 }],
 })
 
+/** 선형 회귀 실행 하나. 계수 표도 회귀선도 **형식**으로 판정된다. */
+const regressed = run({
+  algorithm: 'linear_regression',
+  model: {
+    format: 'mlpx-linear-regression-v1',
+    path: 'model/run-1.json',
+    includesPreprocessing: false,
+    sizeBytes: 128,
+  },
+})
+
 /** 군집 실행 하나. 두 군집 판이 다 `model`을 요구한다 (배정은 파일에 안 담긴다). */
 const clustered = run({
   algorithm: 'kmeans',
@@ -91,6 +102,33 @@ describe('상세 패널 등록부', () => {
 
   it('회귀에는 아무것도 안 선다 - 그것이 정상이다', () => {
     expect(metricPanelsFor('tabular', 'regression', classified)).toEqual([])
+  })
+
+  /**
+   * **선형 회귀만 회귀선을 갖는다** (`open-decisions.md` "선형 회귀는 회귀선을 그린다").
+   * 나무의 회귀는 계단이라 직선 하나로 못 적고, 그 판정은 형식이 한다.
+   */
+  it('선형 회귀에는 배운 값과 회귀선이 함께 선다', () => {
+    const ids = metricPanelsFor('tabular', 'regression', regressed).map((panel) => panel.id)
+    expect(ids).toEqual(['parameters', 'regression-line'])
+  })
+
+  it('같은 형식이라도 분류 쪽에는 회귀선이 안 선다', () => {
+    // 축이 안 박혀 있으면 이 줄이 조용히 통과한다 — 표 군집 판이 그랬다 (R14-5 A-5).
+    const ids = metricPanelsFor('tabular', 'classification', regressed).map((panel) => panel.id)
+    expect(ids).toEqual(['parameters'])
+  })
+
+  it('나무로 배운 회귀에는 회귀선이 없다', () => {
+    const tree = run({
+      model: {
+        format: 'mlpx-tree-regression-v1',
+        path: 'model/run-1.json',
+        includesPreprocessing: false,
+        sizeBytes: 128,
+      },
+    })
+    expect(metricPanelsFor('tabular', 'regression', tree)).toEqual([])
   })
 
   it('축이 맞아도 담기지 않았으면 안 선다', () => {

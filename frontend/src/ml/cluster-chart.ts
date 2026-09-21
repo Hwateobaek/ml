@@ -308,7 +308,7 @@ export function clusterChartData(
 /**
  * 그림의 나머지 규칙.
  *
- * - **애니메이션을 끈다.** `limits.ts`의 `CLUSTER_SCATTER_POINT_LIMIT`이 이 줄에 매여
+ * - **애니메이션을 끈다.** `limits.ts`의 `SCATTER_POINT_LIMIT`이 이 줄에 매여
  *   있다 — 상한의 근거가 된 실측이 `animation: false`에서 나왔다 (#28-5).
  * - **가리킨 것 하나만 말한다.** 산점도의 기본 모드는 `point`라 커서 아래에 겹친 점을
  *   전부 세운다.

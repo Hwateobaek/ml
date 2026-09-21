@@ -29,7 +29,7 @@ import {
 } from '../src/limits'
 import {
   applyLimitsOff,
-  clusterScatterPointLimit,
+  scatterPointLimit,
   imagePredictPageSize,
   limitsOff,
   maxDatasetColumns,
@@ -71,7 +71,7 @@ describe('켜면 일곱이 함께 열린다', () => {
       maxImageCount,
       predictPageSize,
       imagePredictPageSize,
-      clusterScatterPointLimit,
+      scatterPointLimit,
       maxPortfolioBytes,
     ]) {
       expect(read()).toBe(Number.POSITIVE_INFINITY)
