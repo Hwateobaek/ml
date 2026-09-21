@@ -890,7 +890,7 @@ off 스위치 범위 · `.mlpx` 크기를 하드 블록으로 막지 않는 이�
 
 | 분류 | 상수 |
 |---|---|
-| **우리 기기가 정했다** (27) | `MAX_DATASET_ROWS` · `MAX_IMAGE_COUNT` · `MAX_DATASET_COLUMNS` · `BROWSER_ROW_LIMIT` · `MLJS_*_ROW_LIMIT` 열하나(표 — 2026-09-18에 그레이디언트 부스팅·DBSCAN이 더해졌다) · `MLJS_IMAGE_*_ROW_LIMIT` 여덟 · `CLUSTER_SCATTER_POINT_LIMIT` · `PREDICT_PAGE_SIZE` · `IMAGE_PREDICT_PAGE_SIZE` · `MAX_PORTFOLIO_BYTES` |
+| **우리 기기가 정했다** (27) | `MAX_DATASET_ROWS` · `MAX_IMAGE_COUNT` · `MAX_DATASET_COLUMNS` · `BROWSER_ROW_LIMIT` · `MLJS_*_ROW_LIMIT` 열하나(표 — 2026-09-18에 그레이디언트 부스팅·DBSCAN이 더해졌다) · `MLJS_IMAGE_*_ROW_LIMIT` 여덟 · `SCATTER_POINT_LIMIT` · `PREDICT_PAGE_SIZE` · `IMAGE_PREDICT_PAGE_SIZE` · `MAX_PORTFOLIO_BYTES` |
 | **파일이 나간 뒤가 요구한다** (5) | `MAX_CATEGORY_NAME_LENGTH`(윈도우 260자 경로) · `MAX_FILE_NAME_LENGTH`(파일 시스템) · `MAX_MODEL_BYTES` · `MODEL_BUDGET_BYTES` · `SILHOUETTE_BUDGET_MS`(§1.3) |
 | **계산 자체가 요구한다** (4) | `MIN_SPLIT_ROWS` · `MIN_SILHOUETTE_SAMPLE` · `MIN_CLASSIFICATION_CATEGORIES`(갈릴 것이 없으면 분류가 성립하지 않는다) · `NEURAL_PARALLEL_CHUNK_ROWS`(기울기 합산 정본의 조각 크기 — 값이 바뀌면 모델이 바뀐다, "학습을 코어로 가른다") |
 | **교실을 보고 골랐다** (3) | `MAX_STUDENT_ID_LENGTH` · `MAX_STUDENT_NAME_LENGTH` · `TEST_SIZE_RANGE` |
@@ -933,7 +933,7 @@ off 스위치 범위 · `.mlpx` 크기를 하드 블록으로 막지 않는 이�
 
 **축이 실제로 일을 하는 자리 둘.**
 
-- **`PREDICT_PAGE_SIZE`와 `CLUSTER_SCATTER_POINT_LIMIT`은 페이지처럼 생겼지만 기기 줄이다.**
+- **`PREDICT_PAGE_SIZE`와 `SCATTER_POINT_LIMIT`은 페이지처럼 생겼지만 기기 줄이다.**
   둘 다 자기 주석이 *"화면을 위한 것이 아니라 계산을 위한 것"*·*"보는 것은 다시 그리기 시간"*
   이라고 밝힌다. 생긴 모양이 아니라 **근거가 무엇이었나**로 갈라야 이 둘이 제자리에 간다.
 - **`CLUSTER_MEMBER_PAGE_SIZE`는 반대다.** 값이 스무 줄로 같아도 근거가 *"훑기 좋은가"*라
