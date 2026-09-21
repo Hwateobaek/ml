@@ -32,6 +32,33 @@ const table = computed(() => {
   const { run, modelBytes, preprocessor, experiment } = props.input
   return parameterTableFor(run.model?.format, modelBytes, preprocessor, experiment.settings)
 })
+
+/**
+ * 배운 값으로 세운 식 한 줄 — `mass = 42.53 × neck + 67.76`.
+ *
+ * **부호와 자릿수를 정하는 자리가 여기다** (`ml/parameters.ts`는 계수를 그대로 준다).
+ * 음수 계수는 `+ -3.2`가 아니라 `− 3.2`로 적고, **맨 앞 항만 `+`를 안 붙인다.**
+ * 수는 다른 화면과 같은 유효숫자로 자른다(`format.stat`) — 식만 자릿수가 다르면 위 표의
+ * 계수와 다른 값처럼 보인다.
+ *
+ * **특성이 하나도 없으면 상수만 남는다.** 그때 `= + 67.76`이라고 적으면 식이 아니다.
+ */
+const equationText = computed(() => {
+  const equation = table.value?.equation
+  if (!equation) return null
+
+  const head = equation.target ?? t('results.equationTarget')
+  const term = (value: number, first: boolean): string => {
+    const size = format.stat(Math.abs(value))
+    if (first) return value < 0 ? `−${size}` : size
+    return value < 0 ? ` − ${size}` : ` + ${size}`
+  }
+
+  const terms = equation.terms
+    .map((one, index) => `${term(one.coefficient, index === 0)} × ${one.name}`)
+    .join('')
+  return `${head} = ${terms}${term(equation.intercept, terms === '')}`
+})
 </script>
 
 <template>
@@ -89,6 +116,27 @@ const table = computed(() => {
           </tr>
         </tbody>
       </AppTable>
+    </div>
+
+    <!--
+      **배운 값으로 세운 식.** 표가 계수와 절편을 따로 보여주는데, 그것을 하나의 식으로
+      잇는 일을 화면이 대신한다 — 그 식이 곧 "예측을 어떻게 계산하는가"다.
+
+      **표 뒤에 선다.** 문구가 *"위의 계수와 절편으로 세운 식"*이라고 말하므로, 앞에 두면
+      화면이 자기 자리에 대해 거짓말을 한다.
+
+      **부호와 자릿수는 화면이 정한다** (`ml/parameters.ts`는 계수를 그대로 준다).
+    -->
+    <div v-if="equationText" class="flex min-w-0 flex-col gap-1.5">
+      <h5 class="font-bold">{{ t('results.equationTitle') }}</h5>
+      <p class="text-muted">{{ t('results.equationLead') }}</p>
+      <!--
+        **가로로 넘치면 이 상자 안에서 굴린다.** 원핫으로 특성이 수십 개면 식이 길어지는데,
+        그때 화면 전체가 옆으로 밀리면 안 된다 (`AppTable`과 같은 판단).
+      -->
+      <p class="overflow-x-auto rounded-panel bg-surface-sunken p-3 font-bold whitespace-pre">
+        {{ equationText }}
+      </p>
     </div>
   </section>
 </template>

@@ -264,6 +264,12 @@ describe('회귀', () => {
     expect(metrics.rmse).toBeCloseTo(Math.sqrt(1.5 / 4), 10)
   })
 
+  it('mse는 rmse의 제곱이다 — 둘이 갈리면 한쪽이 거짓말이다', () => {
+    const { metrics } = evaluate('regression', actual, predicted)
+    expect(metrics.mse).toBeCloseTo(1.5 / 4, 10)
+    expect(metrics.mse).toBeCloseTo((metrics.rmse ?? 0) ** 2, 12)
+  })
+
   it('완벽하면 r2가 1이다', () => {
     expect(evaluate('regression', actual, actual).metrics.r2).toBeCloseTo(1, 10)
   })

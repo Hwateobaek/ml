@@ -114,6 +114,38 @@ describe('모델이 배운 값의 표', () => {
     expect(rows[0]?.intercept).not.toBeNull()
   })
 
+  it('선형 회귀 — 식이 계수·절편과 같은 값을 같은 차례로 든다', async () => {
+    const { format, bytes, preprocessor } = await trained('linear_regression', ['키'], '몸무게')
+    const settings = {
+      data: { preprocessing: options('none'), target: '몸무게' },
+    } as unknown as Experiment['settings']
+    const table = parameterTableFor(format, bytes, preprocessor, settings)
+    const row = table?.sections[0]?.rows[0]
+
+    expect(table?.equation?.target).toBe('몸무게')
+    expect(table?.equation?.terms.map((term) => term.name)).toEqual(['키'])
+    expect(table?.equation?.terms[0]?.coefficient).toBe(row?.values[0])
+    expect(table?.equation?.intercept).toBe(row?.intercept)
+  })
+
+  it('타깃 이름을 못 읽으면 식이 서되 이름이 비어 있다', async () => {
+    const { format, bytes, preprocessor } = await trained('linear_regression', ['키'], '몸무게')
+    // 사진 프로젝트처럼 `target`이 없는 설정. 화면이 그 자리에 일반 이름을 쓴다.
+    const table = parameterTableFor(format, bytes, preprocessor, settingsWith('none'))
+    expect(table?.equation?.target).toBeNull()
+    expect(table?.equation?.terms).toHaveLength(1)
+  })
+
+  it('식은 선형 회귀에만 붙는다 — 로지스틱과 나이브 베이즈에는 없다', async () => {
+    const logistic = await trained('logistic_regression', NUMERIC_FEATURES, '결과')
+    const bayes = await trained('naive_bayes', NUMERIC_FEATURES, '결과')
+    for (const one of [logistic, bayes]) {
+      const table = parameterTableFor(one.format, one.bytes, one.preprocessor, settingsWith('none'))
+      expect(table).not.toBeNull()
+      expect(table?.equation, one.format).toBeUndefined()
+    }
+  })
+
   it('나이브 베이즈 — 평균과 분산이 각각 한 표이고 절편이 없다', async () => {
     const { format, bytes, preprocessor } = await trained('naive_bayes', NUMERIC_FEATURES, '결과')
     const table = parameterTableFor(format, bytes, preprocessor, settingsWith('none'))

@@ -278,7 +278,7 @@ describe('학습한 파일을 다시 열어 예측한다', () => {
     const found = reproduceMetrics(reopened)
 
     expect(found).toHaveLength(1)
-    expect(Object.keys(found[0]?.stored ?? {}).sort()).toEqual(['mae', 'r2', 'rmse'])
+    expect(Object.keys(found[0]?.stored ?? {}).sort()).toEqual(['mae', 'mse', 'r2', 'rmse'])
     expect(found[0]?.again).toEqual(found[0]?.stored)
   })
 

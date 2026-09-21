@@ -137,10 +137,20 @@ function evaluateRegression(
   )
   const total = truth.reduce((sum, value) => sum + (value - average) ** 2, 0)
 
+  /**
+   * **평균 제곱 오차.** 아래 `rmse`가 이 값의 제곱근이고, 둘 다 낸다 (2026-09-21).
+   *
+   * 같은 것을 두 번 재는 것이 아니라 **읽는 자리가 다르다** — 교과서와 sklearn의
+   * `mean_squared_error`가 이 값이고(손실 함수가 그대로 이것이다), 제곱근을 씌운 쪽은
+   * 단위가 타깃과 같아 크기를 가늠하는 데 쓴다.
+   */
+  const mse = ratio(residual, count)
+
   return {
     metrics: {
       mae,
-      rmse: Math.sqrt(ratio(residual, count)),
+      mse,
+      rmse: Math.sqrt(mse),
       /**
        * 정답이 전부 같은 값이면 분모가 0이다. 완벽히 맞혔으면 1, 아니면 0으로 둔다.
        * 여기서 NaN을 내보내면 비교표가 통째로 깨진다.
@@ -407,6 +417,9 @@ export const METRIC_DISPLAY: Partial<Record<TaskType, readonly MetricDisplay[]>>
   ],
   regression: [
     { name: 'r2', better: 'higher', format: 'number' },
+    // **제곱 오차는 큰 것부터 작은 것 차례다** — `mse`의 제곱근이 `rmse`이고, 교과서가
+    // 둘을 그 차례로 소개한다. 단위가 타깃과 같은 쪽(`rmse`)이 뒤에 온다.
+    { name: 'mse', better: 'lower', format: 'number' },
     { name: 'rmse', better: 'lower', format: 'number' },
     { name: 'mae', better: 'lower', format: 'number' },
   ],

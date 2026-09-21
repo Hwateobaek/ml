@@ -58,10 +58,39 @@ export interface ParameterSection {
   readonly rows: readonly ParameterRow[]
 }
 
+/** 식의 항 하나 — `계수 × 특성`. */
+export interface EquationTerm {
+  readonly name: string
+  readonly coefficient: number
+}
+
+/**
+ * 선형 회귀식 (`open-decisions.md` "선형 회귀는 배운 식을 그대로 보여준다").
+ *
+ * **여기서도 숫자를 안 만든다** — 파일의 계수·절편을 이름과 짝지어 **차례만** 세운다.
+ * 합치거나 부호를 옮기거나 항을 빼면 그 계산이 대조 밖에 서고, 이 파일의 머리말이
+ * 금지하는 것이 그것이다. 부호를 어떻게 읽을지(`+`인가 `−`인가)와 자릿수는 **화면**이 정한다.
+ */
+export interface RegressionEquation {
+  /** 타깃 열 이름. **못 읽으면 `null`이고 화면이 그 자리에 일반 이름을 쓴다.** */
+  readonly target: string | null
+  /** 특성 차례 그대로. 계수가 0인 항도 뺀 게 아니라 그대로 둔다. */
+  readonly terms: readonly EquationTerm[]
+  readonly intercept: number
+}
+
 export interface ParameterTable {
   /** 전처리기가 붙인 이름 그대로다. 원핫이면 열 하나가 여럿으로 늘어나 있다. */
   readonly featureNames: readonly string[]
   readonly sections: readonly ParameterSection[]
+  /**
+   * 선형 회귀식. **선형 회귀에만 있다.**
+   *
+   * 로지스틱 회귀에는 안 붙인다 — 그쪽 계수는 확률이 아니라 **로그 오즈**의 식이라
+   * 같은 모양으로 적으면 `1.0`이 넘는 답이 나오는 식이 된다. 학생이 읽을 식이 되려면
+   * 시그모이드까지 적어야 하고, 그건 이 화면이 아니라 수업이 할 말이다.
+   */
+  readonly equation?: RegressionEquation
   /**
    * 스케일링을 켠 채로 배운 모델인가.
    *
@@ -85,6 +114,19 @@ function isScaled(settings: Experiment['settings']): boolean {
   if (typeof preprocessing !== 'object' || preprocessing === null) return false
   const scaling: unknown = (preprocessing as { scaling?: unknown }).scaling
   return typeof scaling === 'string' && scaling !== 'none'
+}
+
+/**
+ * 실험이 무엇을 타깃으로 배웠나. **못 읽으면 `null`이다.**
+ *
+ * `settings.data`는 데이터 종류마다 모양이 다른 합집합이라 `isScaled`와 같은 방식으로
+ * 필드가 있는지부터 본다. 사진 프로젝트에는 이 필드가 없고, 그때는 식에 일반 이름이 선다.
+ */
+function targetName(settings: Experiment['settings']): string | null {
+  const data: unknown = settings.data
+  if (typeof data !== 'object' || data === null || !('target' in data)) return null
+  const target: unknown = (data as { target: unknown }).target
+  return typeof target === 'string' && target !== '' ? target : null
 }
 
 /** 클래스마다 한 줄. 가중치와 절편이 같은 순서라는 것은 파서가 이미 확인했다. */
@@ -159,10 +201,28 @@ export function parameterTableFor(
     const width = sections[0]?.rows[0]?.values.length ?? 0
     if (preprocessor.featureNames.length !== width) return null
 
+    /**
+     * **선형 회귀에만 식을 붙인다** (`ParameterTable.equation`). 계수 한 줄과 특성 이름이
+     * 이미 자리를 맞춘 것을 위에서 확인했으므로 여기서는 짝만 짓는다.
+     */
+    const row = format === LINEAR_REGRESSION_FORMAT ? sections[0]?.rows[0] : undefined
+    const equation: RegressionEquation | undefined =
+      row && row.intercept !== null
+        ? {
+            target: targetName(settings),
+            terms: preprocessor.featureNames.map((name, column) => ({
+              name,
+              coefficient: row.values[column] ?? 0,
+            })),
+            intercept: row.intercept,
+          }
+        : undefined
+
     return {
       featureNames: [...preprocessor.featureNames],
       sections,
       scaled: isScaled(settings),
+      ...(equation ? { equation } : {}),
     }
   } catch {
     return null
