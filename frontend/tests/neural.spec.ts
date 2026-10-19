@@ -23,6 +23,16 @@ import {
   parseNeuralRegression,
 } from '../src/ml/models'
 import { lossCurveOf, lossDescended, showsLossCurve } from '../src/ml/loss-curve'
+import { defaultsOf, parametersFor } from '../src/ml/hyperparams'
+import type { NeuralOptions } from '../src/ml/engines/neural'
+
+/**
+ * 엔진이 받는 손잡이 기본값. **등록부에서 가져온다** (`ml/engines/mljs-params.ts`) —
+ * 여기 숫자를 적으면 기본값이 두 벌이 되고, 한쪽만 고쳤을 때 검사가 조용해진다.
+ */
+const NEURAL_DEFAULTS = defaultsOf(
+  parametersFor('mljs', 'neural_network'),
+) as unknown as NeuralOptions
 
 /** 과제 유형. **`targets`가 무엇인지를 이것이 정한다** (`ml/engines/neural.ts`). */
 const CLASSIFY2 = { kind: 'classification', classCount: 2 } as const
@@ -97,7 +107,7 @@ describe('역전파가 손실의 기울기와 같다', () => {
       features,
       encoded,
       CLASSIFY2,
-      { hiddenLayers: 1, neuronsPerLayer: 8 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 1, neuronsPerLayer: 8 },
       42,
     )
 
@@ -121,7 +131,7 @@ describe('역전파가 손실의 기울기와 같다', () => {
       features,
       encoded,
       CLASSIFY2,
-      { hiddenLayers: 1, neuronsPerLayer: 6 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 1, neuronsPerLayer: 6 },
       3,
     )
     const recomputed = lossAt(fitted.weights, fitted.intercepts, features, encoded)
@@ -151,7 +161,7 @@ describe('역전파가 손실의 기울기와 같다', () => {
       features,
       encoded,
       CLASSIFY2,
-      { hiddenLayers: 2, neuronsPerLayer: 5 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 2, neuronsPerLayer: 5 },
       5,
     )
     const weights = start.weights.map((matrix) => matrix.map((row) => [...row]))
@@ -211,7 +221,7 @@ describe('역전파가 손실의 기울기와 같다', () => {
 describe('씨앗이 결과를 정한다', () => {
   it('같은 씨앗이면 같은 곡선이다', async () => {
     const { features, encoded } = twoBlobs()
-    const options = { hiddenLayers: 2, neuronsPerLayer: 5 }
+    const options = { ...NEURAL_DEFAULTS, hiddenLayers: 2, neuronsPerLayer: 5 }
     const a = await fitNeural(features, encoded, CLASSIFY2, options, 42)
     const b = await fitNeural(features, encoded, CLASSIFY2, options, 42)
     expect(a.lossCurve).toEqual(b.lossCurve)
@@ -219,7 +229,7 @@ describe('씨앗이 결과를 정한다', () => {
 
   it('다른 씨앗이면 다른 곡선이다 - 초기화가 도착점을 정한다', async () => {
     const { features, encoded } = twoBlobs()
-    const options = { hiddenLayers: 2, neuronsPerLayer: 5 }
+    const options = { ...NEURAL_DEFAULTS, hiddenLayers: 2, neuronsPerLayer: 5 }
     const a = await fitNeural(features, encoded, CLASSIFY2, options, 42)
     const b = await fitNeural(features, encoded, CLASSIFY2, options, 7)
     expect(a.lossCurve).not.toEqual(b.lossCurve)
@@ -233,7 +243,7 @@ describe('손잡이 둘이 층 모양을 정한다', () => {
       features,
       encoded,
       CLASSIFY2,
-      { hiddenLayers: 3, neuronsPerLayer: 7 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 3, neuronsPerLayer: 7 },
       42,
     )
     expect(fitted.weights).toHaveLength(4)
@@ -251,7 +261,7 @@ describe('손잡이 둘이 층 모양을 정한다', () => {
       features,
       encoded,
       CLASSIFY3,
-      { hiddenLayers: 1, neuronsPerLayer: 4 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 1, neuronsPerLayer: 4 },
       42,
     )
     expect(fitted.weights[1]?.[0]).toHaveLength(3)
@@ -452,7 +462,7 @@ describe('회귀도 같은 역전파를 쓴다', () => {
       features,
       targets,
       REGRESS,
-      { hiddenLayers: 2, neuronsPerLayer: 6 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 2, neuronsPerLayer: 6 },
       42,
     )
     expect(fitted.weights).toHaveLength(3)
@@ -465,7 +475,7 @@ describe('회귀도 같은 역전파를 쓴다', () => {
       features,
       targets,
       REGRESS,
-      { hiddenLayers: 1, neuronsPerLayer: 8 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 1, neuronsPerLayer: 8 },
       42,
     )
     expect(fitted.lossCurve.length).toBeGreaterThan(1)
@@ -480,7 +490,7 @@ describe('회귀도 같은 역전파를 쓴다', () => {
       features,
       targets,
       REGRESS,
-      { hiddenLayers: 2, neuronsPerLayer: 5 },
+      { ...NEURAL_DEFAULTS, hiddenLayers: 2, neuronsPerLayer: 5 },
       5,
     )
     const weights = start.weights.map((matrix) => matrix.map((row) => [...row]))

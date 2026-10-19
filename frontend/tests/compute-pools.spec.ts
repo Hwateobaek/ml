@@ -59,7 +59,6 @@ vi.mock('../src/ml/experiment', async () => {
   }
 })
 
-import { NEURAL_BATCH_SIZE } from '../src/limits'
 import { knnPredict } from '../src/ml/models'
 import { parameterCellCount, weightCellCount, type NeuralTask } from '../src/ml/engines/neural'
 import { growTree } from '../src/ml/worker/forest-compute'
@@ -72,6 +71,16 @@ import { forestSeeds, forestPoolFactory } from '../src/ml/worker/forest-pool'
 import { assignSpans, poolWorkerCount } from '../src/ml/worker/pool'
 import { knnPoolFactory } from '../src/ml/worker/knn-pool'
 import { neuralPoolFactory } from '../src/ml/worker/neural-pool'
+import { defaultsOf, parametersFor } from '../src/ml/hyperparams'
+import type { NeuralOptions } from '../src/ml/engines/neural'
+
+/**
+ * 엔진이 받는 손잡이 기본값. **등록부에서 가져온다** (`ml/engines/mljs-params.ts`) —
+ * 여기 숫자를 적으면 기본값이 두 벌이 되고, 한쪽만 고쳤을 때 검사가 조용해진다.
+ */
+const NEURAL_DEFAULTS = defaultsOf(
+  parametersFor('mljs', 'neural_network'),
+) as unknown as NeuralOptions
 
 beforeEach(() => {
   resetComputeWorkers()
@@ -185,13 +194,19 @@ describe('KNN 풀 공장 — 진짜 워커 경계를 지난다', () => {
 describe('신경망 풀 공장 — 진짜 워커 경계를 지난다', () => {
   // 가중치 15,300 × 배치 200 = 306만이 게이트의 자리다.
   const SIZES = [50, 100, 100, 3]
-  const FEATURES = rows(NEURAL_BATCH_SIZE, 50, 13)
+  const FEATURES = rows(NEURAL_DEFAULTS.batchSize, 50, 13)
   const TARGETS = FEATURES.map((row) => ((row[0] as number) * 3) | 0)
   const TASK: NeuralTask = { kind: 'classification', classCount: 3 }
-  const SEED = { features: FEATURES, targets: TARGETS, sizes: SIZES, task: TASK }
+  const SEED = {
+    features: FEATURES,
+    targets: TARGETS,
+    sizes: SIZES,
+    task: TASK,
+    batchSize: NEURAL_DEFAULTS.batchSize,
+  }
 
   it('갈라 접은 조각들이 조각 번호 순서로 돌아온다', async () => {
-    expect(weightCellCount(SIZES) * NEURAL_BATCH_SIZE).toBeGreaterThan(3_000_000)
+    expect(weightCellCount(SIZES) * NEURAL_DEFAULTS.batchSize).toBeGreaterThan(3_000_000)
     const pool = neuralPoolFactory(SEED)
     expect(pool).not.toBeNull()
 

@@ -32,6 +32,7 @@ import {
   MLJS_KMEANS_CLUSTERS_MS,
   MLJS_LOGISTIC_REGRESSION_BASELINE_MAX_ITER,
   MLJS_LOGISTIC_REGRESSION_MAX_ITER_MS,
+  MLJS_NEURAL_NETWORK_BASELINE_EPOCHS,
   MLJS_NEURAL_NETWORK_BASELINE_LAYERS,
   MLJS_NEURAL_NETWORK_BASELINE_NEURONS,
   MLJS_NEURAL_NETWORK_WEIGHTS_MS,
@@ -227,8 +228,25 @@ function handleFactor(
         MLJS_NEURAL_NETWORK_BASELINE_NEURONS,
       ),
     )
+    /**
+     * **에폭은 따로 곱한다** (2026-10-20에 손잡이가 열렸다).
+     *
+     * 층·뉴런과 달리 **서로를 곱하지 않는다** — 한 바퀴의 비용이 가중치 수가 정하는
+     * 값이고, 바퀴 수는 그 비용을 그대로 되풀이한다. 기준표가 200바퀴로 재어져 있어
+     * 분모가 그 수다 (`MLJS_NEURAL_NETWORK_BASELINE_EPOCHS`).
+     *
+     * **배치 크기는 안 센다.** 한 에폭이 보는 행 수는 배치와 무관하게 같고, 갈리는
+     * 것은 걸음 수와 걸음마다의 고정비뿐이라 잰 적이 없다. **안 잰 것을 곱하지
+     * 않는다** — 예상 시간이 실측에서 나온다는 것이 이 파일의 전제다.
+     */
+    const epochs = Math.max(
+      1,
+      numberOr(hyperparameters, 'maxEpochs', MLJS_NEURAL_NETWORK_BASELINE_EPOCHS),
+    )
     return (
-      interpolate(MLJS_NEURAL_NETWORK_WEIGHTS_MS, neuralWeights(actual, layers, neurons)) / baseline
+      (interpolate(MLJS_NEURAL_NETWORK_WEIGHTS_MS, neuralWeights(actual, layers, neurons)) /
+        baseline) *
+      (epochs / MLJS_NEURAL_NETWORK_BASELINE_EPOCHS)
     )
   }
   if (algorithm === 'k_means') {

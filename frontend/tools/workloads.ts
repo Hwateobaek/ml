@@ -28,7 +28,8 @@ import {
 } from '../src/ml/calibration'
 import { fit } from '../src/ml/engines/mljs'
 import { fitKMeans } from '../src/ml/engines/mljs-kmeans'
-import { fitNeural } from '../src/ml/engines/neural'
+import { fitNeural, type NeuralOptions } from '../src/ml/engines/neural'
+import { defaultsOf, parametersFor } from '../src/ml/hyperparams'
 import { evaluate, evaluateCluster } from '../src/ml/metrics'
 import {
   NEURAL_FORMAT,
@@ -207,7 +208,13 @@ async function measureNeural(
     features,
     targets,
     regression ? { kind: 'regression' } : { kind: 'classification', classCount: classes.length },
-    { hiddenLayers: layers, neuronsPerLayer: neurons },
+    {
+      // **기본값이 먼저이고 사다리의 손잡이가 덮는다** — 순서가 뒤집히면 사다리가
+      // 재려는 층·뉴런이 기본값으로 되돌아간다.
+      ...(defaultsOf(parametersFor('mljs', 'neural_network')) as unknown as NeuralOptions),
+      hiddenLayers: layers,
+      neuronsPerLayer: neurons,
+    },
     42,
   )
   // **예측과 평가까지 지나간다** — 다른 사다리와 같은 자리를 재려면 그래야 한다

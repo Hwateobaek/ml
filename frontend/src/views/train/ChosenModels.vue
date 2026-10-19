@@ -382,6 +382,7 @@ function onParam(row: ChosenModel, spec: HyperparameterSpec, event: Event): void
               v-for="spec in specsOf(row)"
               :key="spec.name"
               :label="t(`hyperparams.${spec.name}`)"
+              :help="t(`hyperparamHelp.${spec.name}`)"
               :hint="t('train.range', { min: spec.min, max: spec.max })"
               :error="outOfRangeNames.has(spec.name) ? t('train.outOfRange') : undefined"
             >

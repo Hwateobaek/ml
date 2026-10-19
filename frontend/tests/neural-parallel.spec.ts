@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { NEURAL_PARALLEL_CHUNK_ROWS, NEURAL_BATCH_SIZE } from '../src/limits'
+import { NEURAL_PARALLEL_CHUNK_ROWS } from '../src/limits'
 import {
   accumulateChunk,
   fitNeural,
@@ -31,6 +31,16 @@ import {
 import { createNeuralComputeHandler } from '../src/ml/worker/neural-compute'
 import { shouldSplitNeural } from '../src/ml/worker/neural-pool'
 import { assignSpans } from '../src/ml/worker/pool'
+import { defaultsOf, parametersFor } from '../src/ml/hyperparams'
+import type { NeuralOptions } from '../src/ml/engines/neural'
+
+/**
+ * 엔진이 받는 손잡이 기본값. **등록부에서 가져온다** (`ml/engines/mljs-params.ts`) —
+ * 여기 숫자를 적으면 기본값이 두 벌이 되고, 한쪽만 고쳤을 때 검사가 조용해진다.
+ */
+const NEURAL_DEFAULTS = defaultsOf(
+  parametersFor('mljs', 'neural_network'),
+) as unknown as NeuralOptions
 
 /** 결정적 표본. 세 클래스가 실제로 갈리는 관계라 학습이 헛돌지 않는다. */
 function sample(rows: number): { features: number[][]; targets: number[] } {
@@ -98,7 +108,7 @@ describe('결과는 코어 수와 무관하다', () => {
     const { features, targets } = sample(120)
     expect(features.length).toBeGreaterThan(NEURAL_PARALLEL_CHUNK_ROWS * 2)
 
-    const options = { hiddenLayers: 2, neuronsPerLayer: 8 }
+    const options = { ...NEURAL_DEFAULTS, hiddenLayers: 2, neuronsPerLayer: 8 }
     const serial = await fitNeural(features, targets, TASK, options, 42)
     const log = { steps: 0 }
     const pooled = await fitNeural(features, targets, TASK, options, 42, inProcessPool(log))
@@ -118,7 +128,7 @@ describe('결과는 코어 수와 무관하다', () => {
     const raw = targets.map((value, i) => value * 2 + (features[i]?.[0] ?? 0))
     const task: NeuralTask = { kind: 'regression' }
 
-    const options = { hiddenLayers: 1, neuronsPerLayer: 6 }
+    const options = { ...NEURAL_DEFAULTS, hiddenLayers: 1, neuronsPerLayer: 6 }
     const serial = await fitNeural(features, raw, task, options, 7)
     const pooled = await fitNeural(features, raw, task, options, 7, inProcessPool())
 
@@ -219,10 +229,10 @@ describe('조각 배분', () => {
 describe('게이트', () => {
   it('작은 일은 직렬로 남긴다 - 문턱은 속도만 가른다', () => {
     // 작은 망 × 적은 행 — 통신이 계산을 이기는 자리.
-    expect(shouldSplitNeural([8, 16, 3], 100)).toBe(false)
+    expect(shouldSplitNeural([8, 16, 3], 100, NEURAL_DEFAULTS.batchSize)).toBe(false)
     // 큰 망 × 기본 배치 — 실측의 자리(가중치 4.2만 × 배치 200 = 8.3M ≥ 문턱).
     const big = [8, 100, 100, 100, 100, 100, 3]
-    expect(weightCellCount(big) * NEURAL_BATCH_SIZE).toBeGreaterThan(3_000_000)
-    expect(shouldSplitNeural(big, 14_000)).toBe(true)
+    expect(weightCellCount(big) * NEURAL_DEFAULTS.batchSize).toBeGreaterThan(3_000_000)
+    expect(shouldSplitNeural(big, 14_000, NEURAL_DEFAULTS.batchSize)).toBe(true)
   })
 })

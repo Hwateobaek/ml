@@ -576,11 +576,21 @@ describe('프런트엔드 전용 코드', () => {
     for (const name of names) {
       expect(english.has(`hyperparams.${name}`), name).toBe(true)
       expect(korean.has(`hyperparams.${name}`), name).toBe(true)
+      // **설명도 함께 넣게 만든다** (2026-10-20). 이름만 있으면 학생이 `batchSize`를
+      // 보고 무엇을 고르는지 모른 채 숫자를 친다 — 데이터 정제 카드가 선택지마다
+      // 한 줄씩 설명을 다는 것과 같은 규칙이다.
+      expect(english.has(`hyperparamHelp.${name}`), name).toBe(true)
+      expect(korean.has(`hyperparamHelp.${name}`), name).toBe(true)
     }
-    const used = [...english.keys()]
-      .filter((key) => key.startsWith('hyperparams.'))
-      .map((key) => key.slice('hyperparams.'.length))
-    expect(used.filter((key) => !names.has(key))).toEqual([])
+    for (const prefix of ['hyperparams.', 'hyperparamHelp.']) {
+      const used = [...english.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .map((key) => key.slice(prefix.length))
+      expect(
+        used.filter((key) => !names.has(key)),
+        prefix,
+      ).toEqual([])
+    }
   })
 
   it('타깃 자료형을 요구하는 유형마다 그 이유를 적을 자리가 있다', () => {
@@ -851,6 +861,7 @@ describe('화면이 부르는 키가 로케일에 있다', () => {
     'algorithms.', // 등록부의 모델과 실행 방법마다 이름이 있다
     'runtimes.', //   〃
     'hyperparams.', // 손잡이마다 이름이 있다
+    'hyperparamHelp.', //   〃 (손잡이마다 설명도 있다)
     'taskTypes.', // 과제 유형마다 이름이 있고 남는 것이 없다
     'tasks.', // 체크리스트 항목마다 문구가 있다
     'steps.', // 단계마다 탭에 쓸 이름이 있다 (label만 조립한다 - ui-rules가 나머지를 막는다)

@@ -12,11 +12,7 @@
  * 죽고, 그보다 좁은 실패는 `fitNeural`의 finally가 `dispose`로 거둔다.
  */
 
-import {
-  MLJS_NEURAL_PARALLEL_MIN_WEIGHT_ROWS,
-  NEURAL_BATCH_SIZE,
-  NEURAL_PARALLEL_CHUNK_ROWS,
-} from '../../limits'
+import { MLJS_NEURAL_PARALLEL_MIN_WEIGHT_ROWS, NEURAL_PARALLEL_CHUNK_ROWS } from '../../limits'
 import {
   weightCellCount,
   type NeuralChunkGrads,
@@ -32,8 +28,12 @@ import { spawnNeuralComputeWorker } from './spawn'
  * 계산을 이겨서 직렬이 더 빠르다. **속도만 가르고 결과를 못 가른다** — 직렬도 병렬도
  * 같은 조각 순서로 접는다.
  */
-export function shouldSplitNeural(sizes: readonly number[], rowCount: number): boolean {
-  const batch = Math.min(NEURAL_BATCH_SIZE, Math.max(1, rowCount))
+export function shouldSplitNeural(
+  sizes: readonly number[],
+  rowCount: number,
+  batchSize: number,
+): boolean {
+  const batch = Math.min(Math.max(1, Math.round(batchSize)), Math.max(1, rowCount))
   return weightCellCount(sizes) * batch >= MLJS_NEURAL_PARALLEL_MIN_WEIGHT_ROWS
 }
 
@@ -46,7 +46,7 @@ export function shouldSplitNeural(sizes: readonly number[], rowCount: number): b
  * 이 스레드 몫으로 남긴다. 둘이 안 되면 가르는 값이 없다.
  */
 export const neuralPoolFactory: NeuralPoolFactory = (seed) => {
-  if (!shouldSplitNeural(seed.sizes, seed.features.length)) return null
+  if (!shouldSplitNeural(seed.sizes, seed.features.length, seed.batchSize)) return null
   /**
    * **스텝 하나가 낼 조각 수를 미리 센다.** 그것이 이 풀의 일감이다.
    *
@@ -55,7 +55,7 @@ export const neuralPoolFactory: NeuralPoolFactory = (seed) => {
    * 썼다 (2026-09-04 R26 B-9). 일감을 세어 넘기면 `poolWorkerCount`의 클램프가
    * 그 자리를 그냥 `0`으로 만든다.
    */
-  const batch = Math.min(NEURAL_BATCH_SIZE, Math.max(1, seed.features.length))
+  const batch = Math.min(Math.max(1, Math.round(seed.batchSize)), Math.max(1, seed.features.length))
   const count = poolWorkerCount(Math.ceil(batch / NEURAL_PARALLEL_CHUNK_ROWS))
   if (count === 0) return null
 

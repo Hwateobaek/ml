@@ -1011,6 +1011,9 @@ const TRAINERS: Record<string, Trainer> = {
     const options = {
       hiddenLayers: numberOption(input.hyperparameters, 'hiddenLayers'),
       neuronsPerLayer: numberOption(input.hyperparameters, 'neuronsPerLayer'),
+      maxEpochs: numberOption(input.hyperparameters, 'maxEpochs'),
+      batchSize: numberOption(input.hyperparameters, 'batchSize'),
+      learningRate: numberOption(input.hyperparameters, 'learningRate'),
     }
     const regression = input.taskType === 'regression'
     // **회귀는 부호화하지 않는다. 타깃이 이미 수치다** (`linear_regression`과 같다).

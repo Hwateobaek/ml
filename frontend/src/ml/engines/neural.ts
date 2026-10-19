@@ -26,19 +26,18 @@ import { uniformInt } from 'pure-rand/distribution/uniformInt'
 import { xoroshiro128plus } from 'pure-rand/generator/xoroshiro128plus'
 
 import { hashText } from '../../hash'
-import { NEURAL_BATCH_SIZE, NEURAL_MAX_EPOCHS, NEURAL_PARALLEL_CHUNK_ROWS } from '../../limits'
+import { NEURAL_PARALLEL_CHUNK_ROWS } from '../../limits'
 import { shuffled } from '../shuffle'
 
 /**
- * sklearn `MLPClassifier`의 기본값. **여는 손잡이는 층 수와 뉴런 수 둘뿐이고**
- * (`ml/engines/mljs-params.ts`) 나머지는 여기 고정이다 — 수렴 설정은 수업 내용이 아니라
- * 수업 시간을 말아먹는 값이다(k-means·SVM과 같은 판단).
+ * sklearn `MLPClassifier`의 기본값 중 **손잡이로 안 연 것들**이다
+ * (`ml/engines/mljs-params.ts`가 여는 것은 층 수·뉴런 수·에폭·배치 크기·학습률 다섯).
+ * 규제와 Adam의 상수는 수업 내용이 아니라 수업 시간을 말아먹는 값이라 여기 고정이다.
  *
  * **값을 바꾸면 학생의 결과가 바뀐다.** 그리고 sklearn 기본값에서 멀어지는 순간
  * *"파이썬으로 옮겨 가면 같은 것이 나온다"*가 깨진다 (CLAUDE.md §2).
  */
 const ALPHA = 0.0001
-const LEARNING_RATE_INIT = 0.001
 const BETA_1 = 0.9
 const BETA_2 = 0.999
 const EPSILON = 1e-8
@@ -52,6 +51,21 @@ export interface NeuralOptions {
   readonly hiddenLayers: number
   /** 층당 뉴런 수. sklearn `hidden_layer_sizes`의 **값**. */
   readonly neuronsPerLayer: number
+  /**
+   * 몇 바퀴까지 도는가. sklearn `max_iter`.
+   *
+   * **상한이지 횟수가 아니다** — 손실이 더 안 줄면 그 전에 스스로 멈춘다(`NO_CHANGE`).
+   * 여기 닿은 채 끝나면 `converged`가 거짓이고 화면이 그 사실을 말한다.
+   */
+  readonly maxEpochs: number
+  /**
+   * 한 걸음에 보는 행 수. sklearn `batch_size`(`'auto'`가 `min(200, 행 수)`다).
+   *
+   * **행 수보다 크면 행 수다** — 그때는 한 에폭이 한 걸음이다.
+   */
+  readonly batchSize: number
+  /** 한 걸음의 폭. sklearn `learning_rate_init`. */
+  readonly learningRate: number
 }
 
 export interface FittedNeural {
@@ -403,12 +417,13 @@ function adamStep(
   gradWeights: readonly Float64Array[],
   gradIntercepts: readonly Float64Array[],
   size: number,
+  /** 한 걸음의 폭. **학생이 고른 값이 여기까지 온다** (`NeuralOptions.learningRate`). */
+  learningRate: number,
 ): void {
   const last = weights.length - 1
   adam.step += 1
   const scale =
-    (LEARNING_RATE_INIT * Math.sqrt(1 - Math.pow(BETA_2, adam.step))) /
-    (1 - Math.pow(BETA_1, adam.step))
+    (learningRate * Math.sqrt(1 - Math.pow(BETA_2, adam.step))) / (1 - Math.pow(BETA_1, adam.step))
 
   for (let layer = 0; layer <= last; layer += 1) {
     const matrix = weights[layer] as number[][]
@@ -471,6 +486,15 @@ export interface NeuralPoolSeed {
   readonly targets: readonly number[]
   readonly sizes: readonly number[]
   readonly task: NeuralTask
+  /**
+   * 한 걸음에 보는 행 수. **공장의 게이트가 이 수를 곱에 쓴다** — `가중치 × 배치`가
+   * 문턱 아래면 통신이 계산을 이겨서 가르지 않는다 (`ml/worker/neural-pool.ts`).
+   *
+   * **학생이 고른 값이라 여기로 실려 온다** (2026-10-20에 손잡이가 열렸다). 전에는
+   * 공장이 고정 상수를 다시 읽었는데, 그 상수가 손잡이가 된 뒤에도 그대로 두면
+   * **배치를 16으로 줄인 학습에서 공장은 200을 가정하고 워커를 띄운다.**
+   */
+  readonly batchSize: number
 }
 
 /**
@@ -620,14 +644,26 @@ export async function fitNeural(
   const chunkIntercepts = gradIntercepts.map((grad) => new Float64Array(grad.length))
 
   const order = features.map((_, index) => index)
-  const batchSize = Math.min(NEURAL_BATCH_SIZE, Math.max(1, features.length))
+  /**
+   * **손잡이가 정하고 행 수가 천장이다** — sklearn `batch_size`의 `'auto'`가 하는 일과
+   * 같다(`min(고른 값, 행 수)`). 행보다 큰 배치는 한 에폭이 한 걸음이라는 뜻이고,
+   * 그건 값이 틀린 것이 아니라 그 데이터에서 자연히 그렇게 된 것이다.
+   */
+  const batchSize = Math.min(
+    Math.max(1, Math.round(options.batchSize)),
+    Math.max(1, features.length),
+  )
+  const learningRate = options.learningRate
+  /** 돌 수 있는 바퀴 수. **상한이지 횟수가 아니다** — 수렴하면 그 전에 멈춘다. */
+  const maxEpochs = Math.max(1, Math.round(options.maxEpochs))
 
   /**
    * **가를 것인가는 공장이 정한다** — 일이 작거나 환경이 못 가르면 `null`을 돌려주고
    * 직렬로 돈다 (`ml/worker/neural-pool.ts`의 게이트). 어느 쪽이든 조각 순서가 같아
    * **결과는 못 가른다.** 검사는 자기 공장을 넣어 풀 경로를 작은 망으로도 밟는다.
    */
-  const pool = poolFactory !== undefined ? poolFactory({ features, targets, sizes, task }) : null
+  const pool =
+    poolFactory !== undefined ? poolFactory({ features, targets, sizes, task, batchSize }) : null
   const parameters = pool === null ? null : new Float64Array(parameterCellCount(sizes))
 
   const lossCurve: number[] = []
@@ -637,7 +673,7 @@ export async function fitNeural(
   let epochs = 0
 
   try {
-    for (let epoch = 0; epoch < NEURAL_MAX_EPOCHS; epoch += 1) {
+    for (let epoch = 0; epoch < maxEpochs; epoch += 1) {
       /**
        * **에폭마다 섞는다** (sklearn `shuffle=True`). 안 섞으면 정렬된 교실 CSV에서 배치
        * 하나가 한 라벨로만 채워지고, 그 순서가 그대로 학습에 새겨진다.
@@ -692,7 +728,7 @@ export async function fitNeural(
 
         const penalty = applyRegularization(weights, gradWeights)
         const loss = lossSum / batch.length + (0.5 * ALPHA * penalty) / batch.length
-        adamStep(weights, intercepts, adam, gradWeights, gradIntercepts, batch.length)
+        adamStep(weights, intercepts, adam, gradWeights, gradIntercepts, batch.length, learningRate)
         accumulated += loss * batch.length
       }
 

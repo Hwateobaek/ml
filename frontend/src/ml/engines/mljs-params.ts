@@ -66,12 +66,26 @@ export const MLJS_PARAMETERS: Readonly<Record<string, readonly HyperparameterSpe
    * **아래쪽 끝이 1인 이유는 KNN·나무와 같다** — 은닉층 0개는 값이 아니라 다른
    * 알고리즘(로지스틱 회귀)이고, 뉴런 0개짜리 층은 정보가 지나갈 길이 없다.
    *
-   * 나머지(활성·솔버·학습률·에폭·규제)는 sklearn 기본값에 고정이다. 이유는
+   * **학습을 돌리는 손잡이 셋을 함께 연다** (`open-decisions.md` "신경망의 학습 손잡이
+   * 셋을 연다", 2026-10-20). 에폭·배치 크기·학습률이고, **기본값은 셋 다 sklearn
+   * `MLPClassifier` 그대로**(200 · 200 · 0.001)라 지금까지 학습한 결과가 안 바뀐다.
+   *
+   * - `maxEpochs` — sklearn `max_iter`. 몇 바퀴 도는가. 위쪽 끝이 눈금인 것은 위와 같고,
+   *   **늘리면 시간이 그만큼 는다**(`ml/estimate.ts`가 에폭에 비례해 예상 시간을 올린다).
+   * - `batchSize` — sklearn `batch_size`(`'auto'`가 `min(200, 행 수)`다). 한 걸음에 보는
+   *   행 수이고, 행 수보다 크면 행 수로 줄어든다.
+   * - `learningRate` — sklearn `learning_rate_init`. 한 걸음의 폭이다. 아래쪽 끝이 0이
+   *   아닌 이유는 SVM의 `C`와 같다 — 0은 값이 아니라 **아무것도 안 배우는 고장**이다.
+   *
+   * 나머지(활성·솔버·규제)는 sklearn 기본값에 고정이다. 이유는
    * `ml/engines/neural.ts` 머리말에 있다.
    */
   neural_network: [
     { name: 'hiddenLayers', integer: true, min: 1, max: 5, step: 1, default: 1 },
     { name: 'neuronsPerLayer', integer: true, min: 1, max: 200, step: 1, default: 100 },
+    { name: 'maxEpochs', integer: true, min: 1, max: 1000, step: 10, default: 200 },
+    { name: 'batchSize', integer: true, min: 1, max: 1000, step: 1, default: 200 },
+    { name: 'learningRate', integer: false, min: 0.0001, max: 1, step: 0.0001, default: 0.001 },
   ],
   linear_regression: [],
   // **`C` 하나만 연다** (open-decisions.md "순수 JS 서포트 벡터 머신을 넣는다").

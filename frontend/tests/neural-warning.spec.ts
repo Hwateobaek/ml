@@ -16,7 +16,6 @@
 import { describe, expect, it } from 'vitest'
 
 import { toCanonicalCsv } from '../src/data/serialize'
-import { NEURAL_MAX_EPOCHS } from '../src/limits'
 import { fit } from '../src/ml/engines/mljs'
 import { runExperiment as runExperimentRaw, type ExperimentInput } from '../src/ml/experiment'
 import { lossCurveOf, lossDescended } from '../src/ml/loss-curve'
@@ -36,6 +35,16 @@ import {
 import { irisDataset, IRIS_FEATURE_COLUMNS, IRIS_TARGET_COLUMN } from './fixtures/iris'
 import { emptyProjectFile } from './fixtures/project'
 import { writeProjectBytes } from './fixtures/write'
+import { defaultsOf, parametersFor } from '../src/ml/hyperparams'
+import type { NeuralOptions } from '../src/ml/engines/neural'
+
+/**
+ * 엔진이 받는 손잡이 기본값. **등록부에서 가져온다** (`ml/engines/mljs-params.ts`) —
+ * 여기 숫자를 적으면 기본값이 두 벌이 되고, 한쪽만 고쳤을 때 검사가 조용해진다.
+ */
+const NEURAL_DEFAULTS = defaultsOf(
+  parametersFor('mljs', 'neural_network'),
+) as unknown as NeuralOptions
 
 const OFFLINE = {
   limitsOff: false,
@@ -144,7 +153,7 @@ describe('경고는 에폭 상한에 닿았을 때만 붙는다', { timeout: 60_
         })
         const curve = (result.model as unknown as { lossCurve: number[] }).lossCurve
         expect(result.warning !== undefined, `seed ${seed} neurons ${neurons}`).toBe(
-          curve.length >= NEURAL_MAX_EPOCHS,
+          curve.length >= NEURAL_DEFAULTS.maxEpochs,
         )
         if (result.warning) {
           expect(result.warning.code).toBe('NEURAL_NOT_CONVERGED')
@@ -171,7 +180,9 @@ describe('경고는 에폭 상한에 닿았을 때만 붙는다', { timeout: 60_
         randomState: seed,
       })
       const curve = (result.model as unknown as { lossCurve: number[] }).lossCurve
-      expect(result.warning !== undefined, `seed ${seed}`).toBe(curve.length >= NEURAL_MAX_EPOCHS)
+      expect(result.warning !== undefined, `seed ${seed}`).toBe(
+        curve.length >= NEURAL_DEFAULTS.maxEpochs,
+      )
       if (result.warning) {
         expect(result.warning.code).toBe('NEURAL_REGRESSION_NOT_CONVERGED')
         expect(result.warning.params).toEqual({ iterations: curve.length })
@@ -205,8 +216,10 @@ describe('경고는 에폭 상한에 닿았을 때만 붙는다', { timeout: 60_
         randomState: seed,
       })
       const curve = (result.model as unknown as { lossCurve: number[] }).lossCurve
-      if (curve.length < NEURAL_MAX_EPOCHS) stopped += 1
-      expect(result.warning !== undefined, `seed ${seed}`).toBe(curve.length >= NEURAL_MAX_EPOCHS)
+      if (curve.length < NEURAL_DEFAULTS.maxEpochs) stopped += 1
+      expect(result.warning !== undefined, `seed ${seed}`).toBe(
+        curve.length >= NEURAL_DEFAULTS.maxEpochs,
+      )
     }
     expect(stopped, 'no run stopped early, so the converged branch never ran').toBe(5)
   })

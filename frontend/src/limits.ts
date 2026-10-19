@@ -1127,16 +1127,17 @@ export const MLJS_NEURAL_NETWORK_BASELINE_MS = [
 ] as const
 
 /**
- * 인공신경망의 에폭 상한. **sklearn `MLPClassifier`의 `max_iter` 기본값 그대로다.**
+ * 기준표를 잴 때 돈 **에폭 수** (`MLJS_NEURAL_NETWORK_BASELINE_MS`와 사진 쪽 표가 이
+ * 값을 다 도는 경우로 재 있다).
  *
- * 손잡이로 안 연다(`ml/engines/mljs-params.ts`) — 수렴 설정은 수업 내용이 아니라 수업
- * 시간을 말아먹는 값이고, k-means·SVM과 같은 판단이다. **여기 있는 이유는 이 값이
- * 학습 시간의 천장을 쥐기 때문**이고, 기준표(`MLJS_NEURAL_NETWORK_BASELINE_MS`)가 이
- * 값을 다 도는 경우로 재 있다.
+ * **상한이 아니라 측정 조건이다** (2026-10-20). 에폭은 이제 손잡이라
+ * (`ml/engines/mljs-params.ts`) 학생이 고른 값이 시간을 정하고, 예상 시간은 그 값을 이
+ * 수로 나눠 배수를 만든다 (`ml/estimate.ts`) — `MLJS_GRADIENT_BOOSTING_BASELINE_TREES`가
+ * 그루 수에 하는 일과 같다.
  *
  * **분류: 상한이 아니다.**
  */
-export const NEURAL_MAX_EPOCHS = 200
+export const MLJS_NEURAL_NETWORK_BASELINE_EPOCHS = 200
 
 /**
  * 그레이디언트 부스팅의 나무가 나누는 최소 행 수. **sklearn의 `min_samples_split` 기본값
@@ -1146,15 +1147,6 @@ export const NEURAL_MAX_EPOCHS = 200
  * **분류: 상한이 아니다.**
  */
 export const GRADIENT_BOOSTING_MIN_SAMPLES_SPLIT = 2
-
-/**
- * 미니배치의 크기. **sklearn `batch_size='auto'`가 고르는 `min(200, 행 수)`의 그 200이다.**
- *
- * 행이 이보다 적으면 배치가 하나뿐이라 전체 배치 학습이 된다 — sklearn도 같다.
- *
- * **분류: 상한이 아니다.**
- */
-export const NEURAL_BATCH_SIZE = 200
 
 /**
  * 신경망 기울기 합산의 **조각 크기** — 배치를 이 크기로 갈라 조각 안은 표본 순서로,
