@@ -29,7 +29,9 @@ import {
 } from '@/data/image/upload'
 import { ClientError, isClientError } from '@/errors'
 import { FALLBACK_LOCALE, isSupportedLocale } from '@/i18n'
+import { MIN_SPLIT_ROWS } from '@/limits'
 import { backboneFor } from '@/ml/backbones'
+import { trainablePhotoCount } from '@/ml/training-source'
 import { useRadioGroupGuard } from '@/composables/useRadioGroupGuard'
 import { useWork } from '@/composables/useWork'
 import { splitsData, stratifyBlockFor, stratifyLocked } from '@/ml/selection'
@@ -43,7 +45,7 @@ import {
   imageOverflow,
   readImages,
 } from '@/project/images'
-import { withSplit } from '@/project/settings'
+import { withSampling, withSplit } from '@/project/settings'
 import { useProjectStore } from '@/stores/project'
 import { useToastStore } from '@/stores/toasts'
 
@@ -69,9 +71,73 @@ const labels = computed(() =>
     .filter((category) => category !== IMAGE_UNLABELED),
 )
 
+/**
+ * 뽑기 전에 쓸 수 있는 사진 수. **이 손잡이의 천장이다.**
+ *
+ * **학습이 세는 것과 같은 함수다** (`ml/training-source.ts`) — 갈리면 화면과 학습이
+ * 다른 장수를 말한다. 그 함수가 `nSamples`를 **안 빼는** 이유도 이 자리다: 뽑은 값을
+ * 반영하면 학생이 800을 넣는 순간 천장도 800이 되어 다시는 못 올린다.
+ */
+const usablePhotos = computed(() =>
+  project.file === null ? 0 : trainablePhotoCount(project.file, project.taskType),
+)
+
+/** 지금 뽑기로 한 수. 안 뽑으면 `undefined`다. */
+const nSamples = computed(() => settings.value?.nSamples)
+
+/**
+ * **사진이 모자라면 잠근다** (`TabularPrepPanel`의 `samplingLocked`와 같은 자리).
+ * 켜면 `nSamples`에 쓸 수 있는 사진보다 큰 수가 박히고, 그 숫자는 파일에 남는다.
+ */
+const samplingLocked = computed(() => usablePhotos.value < MIN_SPLIT_ROWS)
+
+/** 뽑은 뒤 남는 사진. **모델이 한 번도 보지 않는 장이다.** */
+const sampleSummary = computed(() => {
+  const chosen = nSamples.value
+  if (chosen === undefined) return null
+  const usable = usablePhotos.value
+  const used = Math.min(usable, chosen)
+  return { usable, used, rest: Math.max(usable - used, 0) }
+})
+
+function setSampling(chosen: number | undefined): void {
+  project.update((live) => ({
+    ...live,
+    document: withSampling(live.document, chosen, new Date().toISOString()),
+  }))
+}
+
+/**
+ * 켤 때의 기본값. **천장 그대로다** — 켜자마자 사진이 줄어들면 학생이 고르지도 않은
+ * 표본으로 학습하게 된다. 줄이는 것은 학생이 한다.
+ */
+function startSampling(input: HTMLInputElement): void {
+  setSampling(Math.max(usablePhotos.value, MIN_SPLIT_ROWS))
+  // **DOM을 스키마로 되돌린다** (architecture.md §8.15.1). 열린 프로젝트가 없으면
+  // 위가 아무것도 안 하는데, 그때 라디오만 켜진 채로 남으면 화면이 거짓말한다.
+  input.checked = nSamples.value !== undefined
+}
+
+/**
+ * 입력값을 천장과 바닥 사이로 되돌린다. **입력 중에는 부르지 않는다**(change에 건다) —
+ * keyup마다 고치면 `800`을 치는 도중의 `8`이 바닥으로 튀어 올라 뒷자리를 못 친다.
+ *
+ * **끝에서 칸을 스키마 값으로 다시 쓴다** (§8.15.1). 클램프한 결과가 지금 값과 같으면
+ * computed가 안 바뀌어 Vue가 DOM을 다시 안 쓰고, 그러면 학생이 친 수가 칸에 남은 채
+ * 아래 요약 줄만 파일 값을 말한다.
+ */
+function setSamplePhotos(input: HTMLInputElement): void {
+  const parsed = Number.parseInt(input.value, 10)
+  const next = Number.isNaN(parsed)
+    ? (nSamples.value ?? usablePhotos.value)
+    : Math.min(Math.max(parsed, MIN_SPLIT_ROWS), usablePhotos.value)
+  setSampling(next)
+  input.value = String(next)
+}
+
 /** **판정은 화면 밖에 있다** — 표와 같은 함수다 (`ml/selection.ts`). */
 const stratifyBlockNow = computed(() =>
-  stratifyBlockFor(project.taskType, labels.value, settings.value?.nSamples),
+  stratifyBlockFor(project.taskType, labels.value, nSamples.value),
 )
 
 const stratifyReason = computed(() => {
@@ -467,6 +533,87 @@ function onStratify(event: Event): void {
       그리고 테스트용 zip이 와도 안 생긴다"). 테스트 데이터는 언제나 선택이라 언제나 체크된
       항목이 되고, 그건 학생에게 아무것도 안 알려 준다.
     -->
+    <!--
+      **사진도 뽑을 수 있다** (`open-decisions.md` "사진도 뽑을 수 있다").
+
+      **표의 뽑기 카드와 같은 문법이다** (`TabularPrepPanel`) — 양자택일이고, 세 번째
+      상태가 없어야 "일부만 뽑는데 몇 장인지 모르는" 칸이 안 생긴다. 다른 것은 세는
+      단위뿐이다(행 → 장).
+
+      **여기가 잠긴 카드를 여는 자리다.** 사진은 한 장이 1,280차원이라 트리 계열과
+      신경망의 상한이 500~1,000장인데(`limits.ts`), 그 상한에 걸린 학생이 지금까지
+      둘 수 있는 수는 **사진을 지우는 것뿐**이었다.
+    -->
+    <section class="rounded-panel border border-line bg-surface p-4">
+      <h2 class="font-bold">{{ t('preprocess.samplePhotosTitle') }}</h2>
+      <p class="mt-1 text-ink-soft">{{ t('preprocess.samplePhotosLead') }}</p>
+
+      <div class="mt-3 flex flex-col gap-4">
+        <label class="flex cursor-pointer items-start gap-2">
+          <input
+            type="radio"
+            name="image-sampling"
+            class="mt-1 size-4 accent-brand"
+            :checked="nSamples === undefined"
+            @change="setSampling(undefined)"
+          />
+          <span class="flex flex-col">
+            <span class="font-bold">{{ t('preprocess.samplePhotosAll') }}</span>
+            <span class="text-ink-faint">{{ t('preprocess.samplePhotosAllNote') }}</span>
+          </span>
+        </label>
+
+        <div>
+          <label class="flex cursor-pointer items-start gap-2">
+            <input
+              type="radio"
+              name="image-sampling"
+              class="mt-1 size-4 accent-brand"
+              :checked="nSamples !== undefined"
+              :disabled="samplingLocked"
+              @change="startSampling($event.target as HTMLInputElement)"
+            />
+            <span class="flex flex-col">
+              <span class="font-bold">{{ t('preprocess.samplePhotosPart') }}</span>
+              <span class="text-ink-faint">{{ t('preprocess.samplePhotosPartNote') }}</span>
+            </span>
+          </label>
+
+          <!-- **이유 없이 회색이면 고장으로 본다** (architecture.md §8.2). -->
+          <p v-if="samplingLocked" class="mt-1 ml-6 text-caution">
+            {{ t('preprocess.samplePhotosNeedsPhotos', { min: MIN_SPLIT_ROWS }) }}
+          </p>
+
+          <div v-if="sampleSummary" class="mt-3 ml-6">
+            <label class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span class="font-bold text-ink-soft">
+                {{ t('preprocess.samplePhotosCount') }}
+              </span>
+              <input
+                type="number"
+                class="w-28 rounded border border-line bg-surface px-2 py-1 text-right tabular-nums"
+                :min="MIN_SPLIT_ROWS"
+                :max="usablePhotos"
+                :value="sampleSummary.used"
+                @change="setSamplePhotos($event.target as HTMLInputElement)"
+              />
+            </label>
+            <!-- **조용히 일부만 쓰지 않는다** — 안 쓰는 사진이 몇 장인지 말한다. -->
+            <p class="mt-1.5 text-caution">
+              {{ t('preprocess.samplePhotosSummary', sampleSummary) }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!--
+        **뽑기가 줄이는 것은 학습 시간뿐이다.** 임베딩은 올린 사진 전부에 대해 돌고
+        (`ml/training-source.ts`가 `pendingEmbeddings`를 뽑기 전에 부른다), 그 사실을
+        안 말하면 학생은 뽑아 놓고 백본이 왜 오래 도는지 모른다.
+      -->
+      <p class="mt-3 text-ink-faint">{{ t('preprocess.samplePhotosEmbedNote') }}</p>
+    </section>
+
     <section class="rounded-panel border border-line bg-surface p-4">
       <h2 class="font-bold">{{ t('preprocess.testDataTitle') }}</h2>
       <!--

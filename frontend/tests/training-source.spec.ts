@@ -20,6 +20,7 @@ import type { EmbedWorker } from '../src/ml/embed/client'
 import {
   algorithmSelectionFor,
   runtimeContextFor,
+  trainablePhotoCount,
   trainableRowsOf,
   trainingSourceOf,
 } from '../src/ml/training-source'
@@ -27,7 +28,7 @@ import { newProjectDocument } from '../src/project/create'
 import { addEmbeddings, readEmbeddings } from '../src/project/embeddings'
 import { type ProjectFile } from '../src/project/format'
 import { addImages, applyTestImages, readImages } from '../src/project/images'
-import { withSplit } from '../src/project/settings'
+import { withSampling, withSplit } from '../src/project/settings'
 import { IMAGE_UNLABELED } from '../src/project/format'
 
 /**
@@ -320,6 +321,37 @@ describe('테스트용 사진이 학습까지 닿는다', () => {
 
     expect(trainableRowsOf(withUnlabeled, 'classification')).toBe(2)
     expect(trainableRowsOf(withUnlabeled, 'clustering')).toBe(3)
+  })
+
+  /**
+   * **사진에서도 뽑기가 상한 판정에 든다** (`open-decisions.md` "사진도 뽑을 수 있다").
+   *
+   * 학습은 이미 그만큼만 쓴다 — `imageTrainingSource`가 `settings`를 통째로 넘기고
+   * `planRun`이 `sampleRows`를 부르기 때문이다. **화면만 전부를 세고 있으면** 1,000장
+   * 상한에 걸린 카드가 800장을 뽑은 뒤에도 잠긴 채로 남는다.
+   */
+  it('뽑기로 정한 수가 사진 수의 천장이 된다', () => {
+    const sampled = {
+      ...project(),
+      document: withSampling(project().document, 1, NOW),
+    }
+
+    expect(trainableRowsOf(sampled, 'classification')).toBe(1)
+    expect(trainableRowsOf(sampled, 'clustering')).toBe(1)
+    // **천장이지 바닥이 아니다.** 가진 것보다 큰 수를 넣어도 없는 사진이 생기지 않는다.
+    const greedy = { ...project(), document: withSampling(project().document, 99, NOW) }
+    expect(trainableRowsOf(greedy, 'classification')).toBe(2)
+  })
+
+  /**
+   * **천장은 뽑기를 안 본다** (`TabularPrepPanel`의 `usableRowCount`와 같은 자리).
+   * 뽑은 값을 반영하면 전처리 화면의 손잡이가 자기 천장을 자기가 내려서 다시는 못 올린다.
+   */
+  it('천장을 세는 함수는 뽑기를 안 본다', () => {
+    const sampled = { ...project(), document: withSampling(project().document, 1, NOW) }
+
+    expect(trainablePhotoCount(sampled, 'classification')).toBe(2)
+    expect(trainablePhotoCount(sampled, 'clustering')).toBe(2)
   })
 
   /**

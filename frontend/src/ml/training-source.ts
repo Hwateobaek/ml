@@ -236,11 +236,33 @@ export const TRAINING_SOURCES: Readonly<
 }
 
 /**
+ * 학습에 들어갈 수 있는 사진 수. **뽑기 전의 천장이다.**
+ *
+ * **분류는 라벨 붙은 사진만 센다** — `imageTrainingSource`가 거르는 것과 같아야 한다.
+ * 함께 세면 화면이 말하는 수와 실제로 학습한 수가 갈리고, 그 차이는 결과가 나온
+ * 뒤에야 드러난다.
+ *
+ * **`nSamples`를 여기서 빼지 않는다.** 전처리 화면의 뽑기 손잡이가 이 값을 **천장**으로
+ * 쓰는데, 뽑은 값을 반영하면 학생이 800을 넣는 순간 천장도 800이 되어 다시는 못 올린다
+ * (`TabularPrepPanel`의 `usableRowCount`가 `trainableRowCount`에 `undefined`를 넘기는
+ * 것과 같은 자리). 빼는 일은 아래 상한 판정이 한다.
+ */
+export function trainablePhotoCount(project: ProjectFile, taskType: TaskType | undefined): number {
+  return readImages(project).filter(
+    (entry) => taskType === 'clustering' || entry.category !== IMAGE_UNLABELED,
+  ).length
+}
+
+/**
  * 실행 방법 판정에 넘길 행 수. **종류마다 세는 것이 다르다.**
  *
  * 표는 전처리에서 빠질 행과 뽑기에서 빠질 행을 뺀 수다 — 파일의 행 수를 넘기면 학습이
  * 실제로 받아들일 데이터를 화면이 거부한다. 이미지는 **학습에 들어갈 사진 수**이고,
  * 분류에서는 라벨 붙은 것만이다(어댑터가 세는 것과 같아야 한다).
+ *
+ * **양쪽 다 `nSamples`를 뺀다** (`open-decisions.md` #22, "사진도 뽑을 수 있다").
+ * 뽑기는 잠긴 카드를 여는 유일한 수단이라, 여기 반영되지 않으면 손잡이가 아무 일도
+ * 안 한다 — 사진에서는 그 손잡이가 **1,000장 상한에 걸린 인공신경망을 여는 자리**다.
  */
 export const TRAINING_ROW_COUNTS: Readonly<
   Record<DataType, (project: ProjectFile, taskType: TaskType | undefined) => number>
@@ -259,10 +281,14 @@ export const TRAINING_ROW_COUNTS: Readonly<
       project.document.settings.nSamples,
     )
   },
-  image: (project, taskType) =>
-    readImages(project).filter(
-      (entry) => taskType === 'clustering' || entry.category !== IMAGE_UNLABELED,
-    ).length,
+  image: (project, taskType) => {
+    const photos = trainablePhotoCount(project, taskType)
+    const chosen = project.document.settings.nSamples
+    // **뽑기는 사진에서도 그대로 돈다.** `imageTrainingSource`가 `settings`를 통째로
+    // 넘기고 `planRun`이 `sampleRows`를 부르므로(`ml/plan.ts`), 학습이 보는 장수가
+    // 이 값이다 — 화면만 안 보고 있던 것이 2026-10-19 전까지의 상태였다.
+    return chosen === undefined ? photos : Math.min(photos, chosen)
+  },
 }
 
 /** 이 프로젝트의 종류가 세는 훈련 행 수. */
