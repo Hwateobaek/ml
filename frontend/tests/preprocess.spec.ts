@@ -9,14 +9,18 @@
 import { describe, expect, it } from 'vitest'
 
 import { isClientError } from '../src/errors'
+import { fitProjection } from '../src/ml/pca'
 import {
   PREPROCESSOR_FORMAT,
+  PROJECTED_PREPROCESSOR_FORMAT,
   detectKind,
+  parsePreprocessor,
   fitPreprocessor,
   missingColumns,
   targetValues,
   transform,
   usableRows,
+  withProjection,
   type Dataset,
 } from '../src/ml/preprocess'
 import type { Preprocessing } from '../src/project/schema'
@@ -375,5 +379,103 @@ describe('사분위 - 짝수 개에서 보간이 돈다', () => {
     // (1-2.5)/1.5 = -1, (4-2.5)/1.5 = 1. 보간이 죽으면 둘 다 다른 값이 된다.
     expect(moved[0]?.[0]).toBeCloseTo(-1, 10)
     expect(moved[3]?.[0]).toBeCloseTo(1, 10)
+  })
+})
+
+/**
+ * 주성분 투영이 전처리기에 담겨 파일을 왕복한다
+ * (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+ *
+ * **여기서 지키는 것은 "학습과 예측이 같은 좌표계에 서는가"다.** 투영이 파일을
+ * 왕복하면서 사라지거나 이름만 남으면, 모델은 자기가 배운 적 없는 수를 받고도
+ * **예외 없이 답을 낸다.**
+ */
+describe('주성분 투영', () => {
+  /** 네 열이 사실은 두 방향뿐인 표. 줄여도 잃는 것이 없다. */
+  const wide: Dataset = {
+    columns: ['a', 'b', 'c', 'd'],
+    rows: Array.from({ length: 12 }, (_, index) => {
+      const x = Math.sin(index) * 3
+      const y = Math.cos(index) * 2
+      return [String(x), String(y), String(x * 2 - y), String(x + y * 0.5)]
+    }),
+  }
+  const wideFeatures = ['a', 'b', 'c', 'd']
+  const rows = wide.rows.map((_row, index) => index)
+  const options = preprocessing({ missing: 'drop' })
+
+  function projected() {
+    const base = fitPreprocessor(wide, rows, wideFeatures, options)
+    const projection = fitProjection(transform(base, wide, rows, 'onehot'), 2, 42)
+    expect(projection).not.toBeNull()
+    return withProjection(base, projection!)
+  }
+
+  it('투영이 붙으면 형식 이름과 특성 이름이 함께 바뀐다', () => {
+    const preprocessor = projected()
+
+    expect(preprocessor.format).toBe(PROJECTED_PREPROCESSOR_FORMAT)
+    expect(preprocessor.featureNames).toEqual(['pc0', 'pc1'])
+    // 원래 열은 그대로 남는다 — 대체값과 스케일링 기준이 거기 있다.
+    expect(preprocessor.columns).toHaveLength(4)
+  })
+
+  it('변환한 행이 성분 수만큼의 칸을 갖는다', () => {
+    const matrix = transform(projected(), wide, rows, 'onehot')
+
+    expect(matrix).toHaveLength(rows.length)
+    expect(matrix[0]).toHaveLength(2)
+  })
+
+  it('파일을 왕복해도 같은 좌표를 준다', () => {
+    const preprocessor = projected()
+    const before = transform(preprocessor, wide, rows, 'onehot')
+
+    const reread = parsePreprocessor(JSON.parse(JSON.stringify(preprocessor)))
+    const after = transform(reread, wide, rows, 'onehot')
+
+    expect(reread.format).toBe(PROJECTED_PREPROCESSOR_FORMAT)
+    expect(after).toEqual(before)
+  })
+
+  /**
+   * **v2라고 적힌 파일의 투영은 안 읽는다.** 읽으면 이름이 뜻을 잃고, v2만 아는
+   * 해석기와 우리가 같은 파일에서 다른 좌표를 만든다.
+   */
+  it('v2 이름이면 투영을 안 읽는다', () => {
+    const preprocessor = projected()
+    const reread = parsePreprocessor({
+      ...JSON.parse(JSON.stringify(preprocessor)),
+      format: PREPROCESSOR_FORMAT,
+      // 이름이 v2면 특성 이름도 투영 전의 것이어야 자리가 맞는다.
+      featureNames: ['a', 'b', 'c', 'd'],
+    })
+
+    expect(reread.projection).toBeUndefined()
+    expect(transform(reread, wide, rows, 'onehot')[0]).toHaveLength(4)
+  })
+
+  it('v3인데 투영이 없으면 거부한다', () => {
+    const rest = { ...projected(), projection: undefined }
+    expect(codeOf(() => parsePreprocessor(JSON.parse(JSON.stringify(rest))))).toBe(
+      'MODEL_FILE_INVALID',
+    )
+  })
+
+  it('성분 길이가 어긋나면 거부한다', () => {
+    const preprocessor = projected()
+    const broken = JSON.parse(JSON.stringify(preprocessor)) as {
+      projection: { components: number[][] }
+    }
+    broken.projection.components[1] = [1, 2]
+
+    expect(codeOf(() => parsePreprocessor(broken))).toBe('MODEL_FILE_INVALID')
+  })
+
+  it('이름 수와 성분 수가 다르면 거부한다', () => {
+    const preprocessor = projected()
+    const broken = { ...JSON.parse(JSON.stringify(preprocessor)), featureNames: ['pc0'] }
+
+    expect(codeOf(() => parsePreprocessor(broken))).toBe('MODEL_FILE_INVALID')
   })
 })

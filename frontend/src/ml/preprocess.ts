@@ -21,6 +21,7 @@ import { z } from 'zod'
 import { ClientError } from '../errors'
 import type { Preprocessing } from '../project/schema'
 import { clipValue, outlierBounds, type OutlierBounds } from './outliers'
+import { applyProjection, type Projection } from './pca'
 import { appliedRanges, inRange, type ColumnRanges } from './ranges'
 
 /**
@@ -33,10 +34,27 @@ import { appliedRanges, inRange, type ColumnRanges } from './ranges'
 export const PREPROCESSOR_FORMAT = 'mlpx-preprocess-v2'
 
 /**
+ * **주성분으로 특성을 줄인 전처리기** (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+ *
+ * **이름이 갈려야 하는 이유는 v2와 같다.** 이 파서는 모르는 필드를 버리므로, v2 이름으로
+ * 투영을 적으면 v2만 아는 해석기가 **투영을 건너뛴 1,280칸짜리 행**을 모델에 넣는다.
+ * 이름이 다르면 그 해석기는 읽기를 시끄럽게 거부하고, 학생은 "이 파일은 더 새 버전에서
+ * 만들었다"를 알게 된다.
+ *
+ * **v2가 움직인 것이 아니다.** 투영이 없는 전처리기는 지금도 v2로 적힌다 — 지금까지
+ * 만든 파일과 PCA를 안 쓰는 프로젝트는 이 이름을 한 번도 안 본다.
+ */
+export const PROJECTED_PREPROCESSOR_FORMAT = 'mlpx-preprocess-v3'
+
+/**
  * 읽을 수 있는 형식. **v1도 계속 읽는다** — 이미 나간 파일에 들어 있고, `clip`이 없는
  * 전처리기는 v2에서도 뜻이 같다 (없으면 안 자른다).
  */
-export const READABLE_PREPROCESSOR_FORMATS = ['mlpx-preprocess-v1', PREPROCESSOR_FORMAT] as const
+export const READABLE_PREPROCESSOR_FORMATS = [
+  'mlpx-preprocess-v1',
+  PREPROCESSOR_FORMAT,
+  PROJECTED_PREPROCESSOR_FORMAT,
+] as const
 
 /**
  * 열의 자료형. **데이터에서 판정한다.**
@@ -69,15 +87,25 @@ export interface FittedColumn {
 }
 
 export interface Preprocessor {
-  format: typeof PREPROCESSOR_FORMAT
+  format: typeof PREPROCESSOR_FORMAT | typeof PROJECTED_PREPROCESSOR_FORMAT
   columns: FittedColumn[]
   /**
    * 변환 후 특성 이름. onehot이면 열 하나가 여럿으로 늘어난다.
    * featureImportance가 이 이름을 쓰므로 순서가 행렬의 열 순서와 같아야 한다.
+   *
+   * **투영이 있으면 `pc0`…이다** — 그때 모델이 보는 열은 원래 열이 아니라 주성분이고,
+   * 이름이 그 사실을 말해야 계수 표가 거짓말을 안 한다.
    */
   featureNames: string[]
   /** 학습에 쓰이지 않은 열과 그 이유. 화면이 학생에게 보여준다. */
   excludedColumns: { name: string; reason: 'notEncodable' }[]
+  /**
+   * 주성분 투영. **있으면 열 단계를 마친 행이 한 번 더 옮겨진다** (`ml/pca.ts`).
+   *
+   * **훈련 행에서만 배운다** (`ml/plan.ts`가 분할 뒤에 맞춘다) — 대체값·스케일링 기준과
+   * 같은 약속이다. 그래서 전처리기에 담기고, 예측도 같은 투영을 지난다.
+   */
+  projection?: Projection
 }
 
 /** 빈 칸을 결측으로 본다. 'N/A' 같은 문자열은 손대지 않는다 - 그건 값이지 결측이 아니다. */
@@ -417,6 +445,18 @@ const preprocessorSchema = z.looseObject({
   excludedColumns: z
     .array(z.looseObject({ name: z.string(), reason: z.literal('notEncodable') }))
     .default([]),
+  /**
+   * 주성분 투영. **v3에만 있다** (`PROJECTED_PREPROCESSOR_FORMAT`).
+   *
+   * 자리가 맞물리는지는 아래 `parsePreprocessor`가 본다 — 성분의 길이가 평균의 길이와
+   * 다르면 **한 칸 밀린 좌표**가 되고, 그 상태로도 예측은 예외 없이 끝난다.
+   */
+  projection: z
+    .looseObject({
+      mean: z.array(z.number()).min(1),
+      components: z.array(z.array(z.number()).min(1)).min(1),
+    })
+    .optional(),
 })
 
 /**
@@ -444,8 +484,31 @@ export function parsePreprocessor(value: unknown): Preprocessor {
   // 모르는 필드는 여기서 사라진다. 문서 스키마(project/schema.ts)와 반대인 이유는 **이
   // 파일을 다시 쓰지 않기 때문이다** - zip 안의 원본은 그대로 남고, 우리는 예측 한 번을
   // 위해 읽을 뿐이다. 모델 해석기가 하는 것과 같다.
+  /**
+   * **투영은 v3에서만 읽는다.** v2라고 적힌 파일에 투영이 들어 있으면 그 파일을 쓴
+   * 쪽이 이름을 안 올린 것이고, 그대로 읽으면 **이름이 뜻을 잃는다** — v2만 아는
+   * 해석기와 우리가 같은 파일에서 다른 좌표를 만든다.
+   *
+   * **v3인데 투영이 없으면 거부한다.** 그 이름이 약속하는 것이 투영 하나뿐이라,
+   * 없으면 읽을 수 있는 척할 이유가 없다.
+   */
+  const projected = parsed.data.format === PROJECTED_PREPROCESSOR_FORMAT
+  const found = projected ? parsed.data.projection : undefined
+  if (projected && found === undefined) {
+    throw new ClientError('MODEL_FILE_INVALID', { field: 'projection' })
+  }
+  // **자리가 어긋나면 안 읽는다.** 성분 하나가 평균과 길이가 다르면 그 뒤의 모든 좌표가
+  // 밀린 채로 나오고, 예측은 예외 없이 끝난다.
+  if (found && found.components.some((component) => component.length !== found.mean.length)) {
+    throw new ClientError('MODEL_FILE_INVALID', { field: 'projection.components' })
+  }
+  if (found && parsed.data.featureNames.length !== found.components.length) {
+    throw new ClientError('MODEL_FILE_INVALID', { field: 'featureNames' })
+  }
+
   return {
-    format: PREPROCESSOR_FORMAT,
+    format: found ? PROJECTED_PREPROCESSOR_FORMAT : PREPROCESSOR_FORMAT,
+    ...(found ? { projection: { mean: found.mean, components: found.components } } : {}),
     columns: parsed.data.columns.map((column) => ({
       name: column.name,
       kind: column.kind,
@@ -522,8 +585,36 @@ export function transform(
       }
     }
 
-    return values
+    /**
+     * **투영은 맨 끝이다** (`ml/pca.ts`). 열 단계(대체·클리핑·스케일링·인코딩)를 다
+     * 마친 행이 주성분 좌표로 옮겨진다 — 훈련에서 맞출 때도 같은 순서였다.
+     *
+     * **예측도 이 줄을 지난다.** 두 벌이 되면 예측만 다른 좌표계에 놓이고, 모델은
+     * 자기가 배운 적 없는 수를 받아 **예외 없이 엉뚱한 답**을 낸다.
+     */
+    return preprocessor.projection ? applyProjection(preprocessor.projection, values) : values
   })
+}
+
+/** 주성분 열의 이름. `pc0`부터 센다 — 0부터가 파이썬 관행이다. */
+export function projectionColumns(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `pc${index}`)
+}
+
+/**
+ * 배운 투영을 전처리기에 얹는다. **형식 이름과 특성 이름이 함께 바뀐다.**
+ *
+ * 셋이 따로 놀 수 있는 자리라 한 함수로 묶는다 — 이름만 v3이고 투영이 없거나,
+ * 투영은 있는데 `featureNames`가 여전히 원래 열이면 **계수 표가 1,280개 이름에 50개
+ * 숫자를 붙인다**(그때 `ml/parameters.ts`가 길이를 보고 아무것도 안 그린다).
+ */
+export function withProjection(preprocessor: Preprocessor, projection: Projection): Preprocessor {
+  return {
+    ...preprocessor,
+    format: PROJECTED_PREPROCESSOR_FORMAT,
+    featureNames: projectionColumns(projection.components.length),
+    projection,
+  }
 }
 
 /**

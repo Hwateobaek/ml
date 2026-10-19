@@ -258,6 +258,13 @@ const LABELS: Readonly<Record<string, { readonly labelKey: string; readonly desc
      * 달라졌는지는 이름이 말하고, 값은 `backboneId`처럼 그저 서로 다르다는 표시다.
      */
     rowsHash: { labelKey: 'meta.image.photoOrder', describe: shortHash },
+    /**
+     * 주성분 수 (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+     *
+     * **바꾸면 모델이 보는 특성이 통째로 달라진다** — `backboneId`와 같은 무게의
+     * 변경이고, 이력에 안 뜨면 점수가 왜 달라졌는지 설명할 자리가 없다.
+     */
+    pcaComponents: { labelKey: 'meta.image.pcaComponents', describe: literal },
   }
 
 /** 점 표기 경로로 값을 꺼낸다. 없으면 undefined다. */

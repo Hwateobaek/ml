@@ -53,6 +53,27 @@ function withTabularData(
 }
 
 /**
+ * 사진 프로젝트의 주성분 수를 정한다 (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+ * `undefined`면 안 줄이는 상태로 되돌린다.
+ *
+ * **이미지 전용이고 이름이 그 사실을 진다** — 위 `withTabularData`의 머리말이 정해 둔
+ * 규칙이다. 표에도 이 손잡이를 열면 그때 이름이 갈리거나 이 함수가 종류를 받는다.
+ *
+ * **없애는 쪽이 `delete`인 이유**는 `withSampling`과 같다 — `undefined`를 담아 두면
+ * "없음"과 "값이 `undefined`"가 섞이고, 스냅샷을 견주는 자리에서 둘이 다른 것이 된다.
+ */
+export function withPcaComponents(
+  document: ProjectDocument,
+  components: number | undefined,
+  now: string,
+): ProjectDocument {
+  const data = { ...dataSettings('image', document.settings) }
+  if (components === undefined) delete data.pcaComponents
+  else data.pcaComponents = components
+  return withSettings(document, { ...document.settings, data }, now)
+}
+
+/**
  * 기계학습 유형을 바꾼다. **`manifest`에 있다** — `settings`가 아니다.
  *
  * 뜻을 잃은 모델 선택은 부르는 쪽이 `algorithmsLosingMeaning`으로 골라 `drop`에 넘긴다.

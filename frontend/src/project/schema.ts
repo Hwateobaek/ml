@@ -28,6 +28,7 @@ import {
   MAX_STUDENT_ID_LENGTH,
   MAX_STUDENT_NAME_LENGTH,
   MIN_SPLIT_ROWS,
+  PCA_COMPONENT_RANGE,
 } from '../limits'
 import { DEFAULT_BACKBONE_ID } from '../ml/backbones'
 import { TRAINING_LOCATIONS } from '../ml/backend'
@@ -274,6 +275,17 @@ export const preprocessingSchema = z.looseObject({
         ),
     )
     .optional(),
+  /**
+   * 주성분 수 (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+   *
+   * **없으면 안 줄인다** — `outliers`·`nSamples`와 같은 방식이다. 지금까지 저장된 파일이
+   * 전부 그 상태이고, 그래서 이 필드가 생겼다고 `FORMAT_VERSION`이 안 움직인다.
+   *
+   * **지금 이 값을 채우는 것은 사진 프로젝트뿐이다**(`ml/images.ts`). 표 화면에는 아직
+   * 이 손잡이가 없다 — 여기 사는 이유는 **전처리기를 맞추는 함수가 이 객체를 받기**
+   * 때문이고(`ml/plan.ts`), 종류마다 다른 길로 넘기면 그 길이 두 벌이 된다.
+   */
+  components: z.int().min(PCA_COMPONENT_RANGE.min).optional(),
 })
 
 /**
@@ -471,6 +483,16 @@ export const imageSettingsSchema = z.looseObject({
    * 다시 뽑아야 할지 판단할 수 없다.
    */
   backboneId: z.string(),
+  /**
+   * 주성분 몇 개로 줄여서 배울지 (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+   *
+   * **없으면 안 줄인다.** 지금까지 만든 사진 프로젝트가 전부 그 상태다.
+   *
+   * **임베딩은 안 건드린다** — 파일에 남는 벡터는 백본이 준 1,280차원 그대로이고,
+   * 줄이는 일은 학습할 때 훈련 행에서 배운 투영이 한다(`ml/plan.ts`). 그래서 이 값을
+   * 바꿔도 사진을 다시 읽지 않는다.
+   */
+  pcaComponents: z.int().min(PCA_COMPONENT_RANGE.min).optional(),
 })
 
 /**
@@ -503,6 +525,14 @@ export function imageInitialSettings(): z.infer<typeof imageSettingsSchema> {
 export const imageSnapshotSchema = z.looseObject({
   categories: z.array(userString),
   backboneId: z.string(),
+  /**
+   * 그 실험이 주성분 몇 개로 줄여서 배웠는가 (`open-decisions.md` "사진의 특성을 줄여서
+   * 배운다"). **없으면 안 줄인 실험이다.**
+   *
+   * **스냅샷에도 있어야 재현이 성립한다** — 화면의 값은 그 뒤로 바뀔 수 있고, 이 값이
+   * 다르면 같은 사진으로도 다른 좌표를 배운다. 변경 이력도 여기서 나온다.
+   */
+  pcaComponents: z.int().min(PCA_COMPONENT_RANGE.min).optional(),
   /**
    * `categories`와 **같은 순서·같은 길이**의 장수.
    *

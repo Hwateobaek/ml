@@ -27,12 +27,15 @@
 import { ClientError, isClientError, type ClientErrorCode, type ClientErrorParams } from '../errors'
 import { dataSettings } from '../project/schema'
 import type { Settings, TaskType } from '../project/schema'
+import { fitProjection } from './pca'
 import {
   detectKind,
   fitPreprocessor,
   missingColumns,
   targetValues,
+  transform,
   usableRows,
+  withProjection,
   type Dataset,
   type Preprocessor,
 } from './preprocess'
@@ -219,12 +222,32 @@ export function planRun(input: PlanInput): RunPlan {
           providedTestRows ? { rows: providedTestRows } : undefined,
         )
 
-    const preprocessor = fitPreprocessor(
-      dataset,
-      split.trainIndices,
-      data.features,
-      data.preprocessing,
-    )
+    const fitted = fitPreprocessor(dataset, split.trainIndices, data.features, data.preprocessing)
+
+    /**
+     * **주성분은 전처리기를 맞춘 뒤에 배운다** (`open-decisions.md` "사진의 특성을
+     * 줄여서 배운다"). 투영이 서는 좌표가 **열 단계를 마친 행**이라, 그 단계를 세우는
+     * 일이 먼저다.
+     *
+     * **훈련 행만 본다.** 바로 위 `fitPreprocessor`가 지키는 약속과 같은 것이고,
+     * 테스트 행까지 보고 축을 정하면 스케일링 기준을 테스트에서 구하는 것과 같은 누수다.
+     *
+     * **씨앗은 그 실험의 것이다.** 무작위 SVD가 난수를 쓰므로, 같은 설정이 같은 축을
+     * 줘야 학생이 어제 본 좌표를 오늘도 본다.
+     *
+     * **못 배우면 그대로 간다** (`fitProjection`이 `null`). 줄일 것이 없는 데이터가
+     * 그렇고, 그때 투영 없이 도는 것이 정답이다.
+     */
+    const components = data.preprocessing.components
+    const projection =
+      components === undefined
+        ? null
+        : fitProjection(
+            transform(fitted, dataset, split.trainIndices, data.preprocessing.categoricalEncoding),
+            components,
+            settings.split.randomState,
+          )
+    const preprocessor = projection ? withProjection(fitted, projection) : fitted
 
     return {
       ok: true,

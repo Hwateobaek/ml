@@ -29,9 +29,9 @@ import {
 } from '@/data/image/upload'
 import { ClientError, isClientError } from '@/errors'
 import { FALLBACK_LOCALE, isSupportedLocale } from '@/i18n'
-import { MIN_SPLIT_ROWS } from '@/limits'
+import { MIN_SPLIT_ROWS, PCA_COMPONENT_RANGE } from '@/limits'
 import { backboneFor } from '@/ml/backbones'
-import { trainablePhotoCount } from '@/ml/training-source'
+import { trainablePhotoCount, trainableRowsOf } from '@/ml/training-source'
 import { useRadioGroupGuard } from '@/composables/useRadioGroupGuard'
 import { useWork } from '@/composables/useWork'
 import { splitsData, stratifyBlockFor, stratifyLocked } from '@/ml/selection'
@@ -45,7 +45,7 @@ import {
   imageOverflow,
   readImages,
 } from '@/project/images'
-import { withSampling, withSplit } from '@/project/settings'
+import { withPcaComponents, withSampling, withSplit } from '@/project/settings'
 import { useProjectStore } from '@/stores/project'
 import { useToastStore } from '@/stores/toasts'
 
@@ -132,6 +132,66 @@ function setSamplePhotos(input: HTMLInputElement): void {
     ? (nSamples.value ?? usablePhotos.value)
     : Math.min(Math.max(parsed, MIN_SPLIT_ROWS), usablePhotos.value)
   setSampling(next)
+  input.value = String(next)
+}
+
+/**
+ * 주성분으로 줄일 수 있는 최대 개수. **데이터가 쥔 천장과 교실용 눈금 중 작은 쪽이다**
+ * (`limits.ts`의 `PCA_COMPONENT_RANGE`).
+ *
+ * 주성분은 `min(행 수, 열 수)`를 넘을 수 없다 — 사진이 20장이면 20개보다 많이 못 만든다.
+ * **뽑기를 반영한 장수로 센다**(`trainableRowsOf`) — 거기까지가 학습이 실제로 보는 행이다.
+ */
+const maxComponents = computed(() => {
+  const photos = project.file === null ? 0 : trainableRowsOf(project.file, project.taskType)
+  return Math.min(PCA_COMPONENT_RANGE.max, Math.max(photos, 0), backboneDim.value)
+})
+
+/** 이 프로젝트 백본의 임베딩 차원. 줄이기 전의 열 수다. */
+const backboneDim = computed(
+  () =>
+    backboneFor(settings.value ? dataSettings('image', settings.value).backboneId : '')
+      ?.embeddingDim ?? 0,
+)
+
+/** 지금 정한 주성분 수. 안 줄이면 `undefined`다. */
+const pcaComponents = computed(() =>
+  settings.value ? dataSettings('image', settings.value).pcaComponents : undefined,
+)
+
+/**
+ * **줄일 것이 있어야 켤 수 있다.** 쓸 수 있는 주성분이 눈금의 바닥에 못 미치면
+ * (사진이 아주 적을 때) 켜 봐야 투영이 안 일어난다 — `fitProjection`이 `null`을 준다.
+ */
+const pcaLocked = computed(() => maxComponents.value < PCA_COMPONENT_RANGE.min)
+
+/**
+ * 칸에 보이는 수. **천장을 넘으면 천장이다** — 사진을 지우거나 뽑을 장수를 줄여 천장이
+ * 내려간 프로젝트가 그렇다. **파일의 값은 안 내린다**: 사진이 돌아오면 고른 수가 그대로
+ * 살아야 하고, 학습도 `fitProjection`이 자기 천장으로 다시 자른다.
+ */
+const shownComponents = computed(() => Math.min(pcaComponents.value ?? 0, maxComponents.value))
+
+function setPca(components: number | undefined): void {
+  project.update((live) => ({
+    ...live,
+    document: withPcaComponents(live.document, components, new Date().toISOString()),
+  }))
+}
+
+/** 켤 때의 기본값. **천장보다 크면 천장이다** — 사진이 적은 프로젝트가 그렇다. */
+function startPca(input: HTMLInputElement): void {
+  setPca(Math.min(PCA_COMPONENT_RANGE.fallback, maxComponents.value))
+  input.checked = pcaComponents.value !== undefined
+}
+
+/** 숫자 칸을 눈금 안으로 되돌린다. **뽑기 칸과 같은 규칙이다** (§8.15.1). */
+function setPcaComponents(input: HTMLInputElement): void {
+  const parsed = Number.parseInt(input.value, 10)
+  const next = Number.isNaN(parsed)
+    ? (pcaComponents.value ?? PCA_COMPONENT_RANGE.fallback)
+    : Math.min(Math.max(parsed, PCA_COMPONENT_RANGE.min), maxComponents.value)
+  setPca(next)
   input.value = String(next)
 }
 
@@ -612,6 +672,80 @@ function onStratify(event: Event): void {
         안 말하면 학생은 뽑아 놓고 백본이 왜 오래 도는지 모른다.
       -->
       <p class="mt-3 text-ink-faint">{{ t('preprocess.samplePhotosEmbedNote') }}</p>
+    </section>
+
+    <!--
+      **특성 줄이기** (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+
+      사진 한 장이 백본을 지나면 숫자 1,280개가 된다. 그 폭이 트리 계열의 학습 시간에
+      그대로 붙으므로, 줄이면 같은 사진으로도 몇십 배 빨리 배운다 — 그리고 "숫자 1,280개
+      중 50개만 남겨도 되나"가 수업에서 물어볼 거리가 된다.
+    -->
+    <section class="rounded-panel border border-line bg-surface p-4">
+      <h2 class="font-bold">{{ t('preprocess.pcaTitle') }}</h2>
+      <p class="mt-1 text-ink-soft">{{ t('preprocess.pcaLead', { dims: backboneDim }) }}</p>
+
+      <div class="mt-3 flex flex-col gap-4">
+        <label class="flex cursor-pointer items-start gap-2">
+          <input
+            type="radio"
+            name="image-pca"
+            class="mt-1 size-4 accent-brand"
+            :checked="pcaComponents === undefined"
+            @change="setPca(undefined)"
+          />
+          <span class="flex flex-col">
+            <span class="font-bold">{{ t('preprocess.pcaOff') }}</span>
+            <span class="text-ink-faint">{{
+              t('preprocess.pcaOffNote', { dims: backboneDim })
+            }}</span>
+          </span>
+        </label>
+
+        <div>
+          <label class="flex cursor-pointer items-start gap-2">
+            <input
+              type="radio"
+              name="image-pca"
+              class="mt-1 size-4 accent-brand"
+              :checked="pcaComponents !== undefined"
+              :disabled="pcaLocked"
+              @change="startPca($event.target as HTMLInputElement)"
+            />
+            <span class="flex flex-col">
+              <span class="font-bold">{{ t('preprocess.pcaOn') }}</span>
+              <span class="text-ink-faint">{{ t('preprocess.pcaOnNote') }}</span>
+            </span>
+          </label>
+
+          <!-- **이유 없이 회색이면 고장으로 본다** (architecture.md §8.2). -->
+          <p v-if="pcaLocked" class="mt-1 ml-6 text-caution">
+            {{ t('preprocess.pcaNeedsPhotos', { min: PCA_COMPONENT_RANGE.min }) }}
+          </p>
+
+          <div v-if="pcaComponents !== undefined" class="mt-3 ml-6">
+            <label class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span class="font-bold text-ink-soft">{{ t('preprocess.pcaComponents') }}</span>
+              <input
+                type="number"
+                class="w-28 rounded border border-line bg-surface px-2 py-1 text-right tabular-nums"
+                :min="PCA_COMPONENT_RANGE.min"
+                :max="maxComponents"
+                :value="shownComponents"
+                @change="setPcaComponents($event.target as HTMLInputElement)"
+              />
+            </label>
+            <p class="mt-1.5 text-caution">
+              {{
+                t('preprocess.pcaSummary', {
+                  dims: backboneDim,
+                  components: shownComponents,
+                })
+              }}
+            </p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="rounded-panel border border-line bg-surface p-4">

@@ -776,6 +776,11 @@ describe('id와 changed', () => {
        * "설정을 바꾸지 않고 다시 학습했습니다"라고 말한다.
        */
       rowsHash: { rowsHash: 'deadbeefdeadbeef' },
+      /**
+       * 주성분 수. **모델이 보는 특성이 통째로 달라지는 칸**이라 백본과 같은 무게다
+       * (`open-decisions.md` "사진의 특성을 줄여서 배운다").
+       */
+      pcaComponents: { pcaComponents: 50 },
     }
 
     /**

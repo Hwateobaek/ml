@@ -20,7 +20,13 @@ import { IMAGE_UNLABELED, type ProjectFile } from '@/project/format'
 import type { ImageRole } from '@/data/image/canonical'
 import { hashText } from '@/hash'
 import { countByCategory, imageCategories, readImages, type ImageEntry } from '@/project/images'
-import { dataSnapshot, type Experiment, type Settings, type TaskType } from '@/project/schema'
+import {
+  dataSettings,
+  dataSnapshot,
+  type Experiment,
+  type Settings,
+  type TaskType,
+} from '@/project/schema'
 
 /**
  * 임베딩 표의 타깃 열 이름.
@@ -158,6 +164,8 @@ export function imageTrainingSource(
 
   const counts = countByCategory(project)
   const categories = imageCategories(project)
+  /** 이 프로젝트의 사진 설정. 주성분 수가 여기서 나온다. */
+  const imageData = dataSettings('image', project.document.settings)
 
   return {
     dataset: {
@@ -174,14 +182,26 @@ export function imageTrainingSource(
          * **셋 다 꺼진 값이다.** 임베딩에는 빈 칸이 없고 범주형 열도 없다. 스케일링이
          * 이미지에서 무슨 뜻인지는 아직 안 정했고(open-decisions.md "이미지 학습의
          * 모양"), 정해지기 전에 뭔가를 켜 두면 그게 기본값으로 굳는다.
+         *
+         * **넷째 칸은 학생이 고른다** — 주성분 수다 (`open-decisions.md` "사진의 특성을
+         * 줄여서 배운다"). 사진 설정의 `pcaComponents`가 여기로 들어오고, 안 골랐으면
+         * 칸 자체가 없다(그때 `ml/plan.ts`가 투영을 안 배운다).
          */
-        preprocessing: { missing: 'none', scaling: 'none', categoricalEncoding: 'onehot' },
+        preprocessing: {
+          missing: 'none',
+          scaling: 'none',
+          categoricalEncoding: 'onehot',
+          ...(imageData.pcaComponents === undefined ? {} : { components: imageData.pcaComponents }),
+        },
       },
     },
     snapshot: {
       // 스키마가 읽고 쓸 배열이라 복사본을 준다 — 위 목록은 읽기 전용이다.
       categories: [...categories],
       backboneId: backbone.id,
+      // **안 골랐으면 칸 자체가 없다.** `undefined`를 담아 두면 변경 이력이 "없음 →
+      // 없음"을 변경으로 셀 자리가 생긴다 (`ml/changes.ts`).
+      ...(imageData.pcaComponents === undefined ? {} : { pcaComponents: imageData.pcaComponents }),
       // **순서가 `categories`와 같아야 한다** (schema.ts). 다르면 이력이 엉뚱한 범주의
       // 장수가 바뀌었다고 말한다.
       categoryCounts: categories.map((category) => counts.get(category) ?? 0),
