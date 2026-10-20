@@ -1030,11 +1030,12 @@
     "tallyLead": "Only classification answers are counted. Models that answered with the same category share a color.",
     "image": {
       "add": "Add photos",
+      "addFolder": "Add a folder",
       "addWhileBusy": "You can add photos once the current task finishes.",
       "clear": "Delete all photos",
       "clearDescription": "This deletes the {count} photo you added for prediction. Your training photos stay. | This deletes the {count} photos you added for prediction. Your training photos stay.",
       "clearTitle": "Remove all photos?",
-      "emptyNext": "Drop photos here, or use [Add photos], and every model gives its answer.",
+      "emptyNext": "Drop photos here, or use [Add photos], and every model gives its answer. With many photos, [Add a folder] takes a whole folder at once.",
       "emptyReason": "No photos yet.",
       "photo": "Photo to predict",
       "remove": "Delete",

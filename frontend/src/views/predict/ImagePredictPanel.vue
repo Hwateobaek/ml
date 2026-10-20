@@ -74,6 +74,12 @@ const project = useProjectStore()
 const toasts = useToastStore()
 
 const fileInput = ref<HTMLInputElement | null>(null)
+/**
+ * 폴더째 고르는 입구. **파일 고르기와 따로 둔다** — 같은 `<input>`에
+ * `webkitdirectory`를 걸면 사진 몇 장만 고르는 길이 없어진다
+ * (`views/data/ImagePanel.vue`가 같은 자리를 이렇게 다룬다).
+ */
+const folderInput = ref<HTMLInputElement | null>(null)
 
 /**
  * 지금 이 화면에서 도는 일들 (architecture.md §8.10.4). **굽기와 임베딩이 겹친다** —
@@ -656,6 +662,14 @@ const showPages = computed(() => totalPages.value > 1 && !filteredOut.value)
       >
         {{ t('predict.image.add') }}
       </AppButton>
+      <AppButton
+        v-if="photos.length > 0"
+        variant="secondary"
+        :disabled="photosLocked"
+        @click="folderInput?.click()"
+      >
+        {{ t('predict.image.addFolder') }}
+      </AppButton>
       <span v-if="progress" class="tabular-nums font-bold" role="status">
         {{ t('meta.image.preparing', { done: progress.completed, total: progress.total }) }}
       </span>
@@ -691,8 +705,12 @@ const showPages = computed(() => totalPages.value > 1 && !filteredOut.value)
       :class="inviting ? 'border-brand bg-brand-soft' : 'border-line-strong bg-surface'"
     >
       <AppEmpty :reason="t('predict.image.emptyReason')" :next="t('predict.image.emptyNext')">
+        <!-- 나란히 세우는 것도 너비를 맞추는 것도 `AppEmpty`가 한다. -->
         <AppButton size="lg" :disabled="busy" @click="fileInput?.click()">
           {{ t('predict.image.add') }}
+        </AppButton>
+        <AppButton size="lg" variant="secondary" :disabled="busy" @click="folderInput?.click()">
+          {{ t('predict.image.addFolder') }}
         </AppButton>
       </AppEmpty>
     </div>
@@ -836,5 +854,11 @@ const showPages = computed(() => totalPages.value > 1 && !filteredOut.value)
       class="hidden"
       @change="onPick"
     />
+    <!--
+      **폴더째 고르는 입구는 따로 선다.** `accept`를 안 주는 이유는 폴더 고르기에서는
+      브라우저가 그걸 무시하기 때문이고, 사진이 아닌 파일은 굽는 워커가 걸러 준다 —
+      데이터 화면과 같은 자리다 (`views/data/ImagePanel.vue`).
+    -->
+    <input ref="folderInput" type="file" webkitdirectory class="hidden" @change="onPick" />
   </div>
 </template>
