@@ -58,6 +58,8 @@ import {
   MLJS_NEURAL_NETWORK_ROW_LIMIT,
   MLJS_RANDOM_FOREST_ROW_LIMIT,
   MLJS_SVM_ROW_LIMIT,
+  TFJS_IMAGE_CNN_BASELINE_MS,
+  TFJS_IMAGE_CNN_ROW_LIMIT,
 } from '../limits'
 import { TASK_TYPES, type DataType, type TaskType } from '../project/schema'
 import { supports, type Axis } from './axes'
@@ -72,9 +74,30 @@ import {
   type UnavailableReason,
 } from './backend'
 
+/**
+ * 이 알고리즘이 **무엇을 특성으로 받는가**
+ * (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+ *
+ * - `embedding` — 백본이 만든 숫자 표. **지금까지 전부가 이것이었다** (open-decisions.md
+ *   "이미지 학습은 표 문제로 바꿔서 푼다"). 표 데이터도 같은 칸을 쓴다 — 거기서는
+ *   정본 CSV가 그 표다.
+ * - `pixels` — 정본 바이트와 사진 해시. **합성곱이 화소를 봐야 해서 생긴 칸이다.**
+ *   표를 못 쓴다 — `Dataset`의 칸이 문자열이라 64×64×3이면 사진 한 장이 문자열
+ *   12,288개이고, 300장이면 370만 개다.
+ *
+ * **불리언 축(`Axis`)이 아니라 값 하나다.** 알고리즘 하나가 두 출처를 동시에 받는 일은
+ * 없고, `Axis`로 두면 "둘 다 참"이라는 표현할 수 없는 상태가 생긴다.
+ */
+export type FeatureSource = 'embedding' | 'pixels'
+
 export interface Algorithm extends AlgorithmSpec {
   readonly dataTypes: Axis<DataType>
   readonly taskTypes: Axis<TaskType>
+  /**
+   * 이 알고리즘에 무엇을 먹이는가. **표 데이터 전용 알고리즘도 적는다** — 칸을 비우면
+   * 새 출처가 생긴 날 누가 무엇을 받는지 다시 세어야 한다.
+   */
+  readonly featureSource: FeatureSource
 }
 
 // `EVERYWHERE`라는 상수가 있었고 일곱 줄이 전부 그걸 가리켰다. **지웠다** - 실행 방법이
@@ -109,13 +132,22 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'decision_tree',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: true, regression: true, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // 20,000행이 최악 145.6초다(2026-08-31 재실측, limits.ts). 분할 탐색이 노드마다
     // O(특성 × 행²)이고, 데이터가 잘 갈릴수록 얕게 끝난다. **이미지에서 가장 크게
     // 갈린다** - 1,000장 58.7초이고 1,500장이면 136초다.
     maxRows: {
-      tabular: { mljs: MLJS_DECISION_TREE_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_DECISION_TREE_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_DECISION_TREE_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: {
+        mljs: MLJS_IMAGE_DECISION_TREE_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
     },
     baseline: {
       tabular: {
@@ -130,11 +162,12 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'knn',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: true, regression: true, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // **학습이 아니라 예측이 비싸고, 그 비용은 예측마다 되풀이된다.**
     maxRows: {
-      tabular: { mljs: MLJS_KNN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_KNN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: { mljs: MLJS_KNN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+      image: { mljs: MLJS_IMAGE_KNN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
     },
     baseline: {
       tabular: {
@@ -149,11 +182,20 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'logistic_regression',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: true, regression: false, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // 선형 회귀와 이름만 닮았다 - 경사하강이고 5000행에서 이미 4.3초다.
     maxRows: {
-      tabular: { mljs: MLJS_LOGISTIC_REGRESSION_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_LOGISTIC_REGRESSION_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_LOGISTIC_REGRESSION_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: {
+        mljs: MLJS_IMAGE_LOGISTIC_REGRESSION_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
     },
     baseline: {
       tabular: { ms: MLJS_LOGISTIC_REGRESSION_BASELINE_MS, columns: 'flat' },
@@ -164,12 +206,21 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'random_forest',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: true, regression: true, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // 5000행 100그루가 약 7분이다. **값이 안 바뀌어도 적는다** (backend.ts의 maxRows).
     // 이미지는 1,000장이 521.7초라 등록부에서 가장 낮은 칸이 됐다.
     maxRows: {
-      tabular: { mljs: MLJS_RANDOM_FOREST_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_RANDOM_FOREST_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_RANDOM_FOREST_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: {
+        mljs: MLJS_IMAGE_RANDOM_FOREST_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
     },
     baseline: {
       tabular: {
@@ -184,11 +235,20 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'naive_bayes',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: true, regression: false, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // 10만 행 0.1초. 데이터를 한 번 훑는다.
     maxRows: {
-      tabular: { mljs: MLJS_NAIVE_BAYES_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_NAIVE_BAYES_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_NAIVE_BAYES_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: {
+        mljs: MLJS_IMAGE_NAIVE_BAYES_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
     },
     baseline: {
       tabular: { ms: MLJS_NAIVE_BAYES_BASELINE_MS, columns: 'linear' },
@@ -199,13 +259,14 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'svm',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: true, regression: false, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // SMO는 행 수의 제곱으로 붙고 학습 시작에 N×N 커널 행렬을 만든다. **여기가 알고리즘별
     // 상한의 시작이었고, 이제는 일곱 줄 전부가 자기 값을 든다** (open-decisions.md #13).
     // **이미지 칸의 값이 같은 것은 우연이다** - 커널 크기는 특성 수를 안 가린다.
     maxRows: {
-      tabular: { mljs: MLJS_SVM_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_SVM_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: { mljs: MLJS_SVM_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+      image: { mljs: MLJS_IMAGE_SVM_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
     },
     baseline: {
       tabular: { ms: MLJS_SVM_BASELINE_MS, columns: 'linear' },
@@ -233,10 +294,19 @@ export const ALGORITHMS: readonly Algorithm[] = [
     // **분류와 회귀를 함께 하는 첫 줄이다.** 갈리는 것은 출력층 셋(칸 수·활성·손실)뿐이고
     // 역전파는 한 줄도 안 갈린다 — 그래서 엔진 하나로 둘을 한다 (mlpx-spec.md §5.11).
     taskTypes: { classification: true, regression: true, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false, tfjs: false },
     maxRows: {
-      tabular: { mljs: MLJS_NEURAL_NETWORK_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_NEURAL_NETWORK_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_NEURAL_NETWORK_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: {
+        mljs: MLJS_IMAGE_NEURAL_NETWORK_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
     },
     baseline: {
       // **`flat`이다.** 특성은 첫 층 하나에만 붙지 학습 전체에 선형이 아니고, 그 몫은
@@ -250,13 +320,18 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'linear_regression',
     dataTypes: { tabular: true, image: false },
     taskTypes: { classification: false, regression: true, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // 10만 행 0.3초. 브라우저 상한을 둘 이유가 없어 데이터셋 천장을 그대로 쓴다.
     // **이미지 칸은 `UNMEASURED`다** - 위 `dataTypes`가 이미 닫아서 판정이 여기까지
     // 오지 않는다. 숫자를 지어 넣으면 재 본 값처럼 보인다 (backend.ts의 UNMEASURED).
     maxRows: {
-      tabular: { mljs: MLJS_LINEAR_REGRESSION_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_LINEAR_REGRESSION_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
     },
     baseline: {
       tabular: { ms: MLJS_LINEAR_REGRESSION_BASELINE_MS, columns: 'linear' },
@@ -267,11 +342,12 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'k_means',
     dataTypes: { tabular: true, image: true },
     taskTypes: { classification: false, regression: false, clustering: true },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     // 할당과 갱신이 반복마다 O(n·k·d). 10만 행 k=20이 112회 반복 6.4초 (limits.ts).
     maxRows: {
-      tabular: { mljs: MLJS_KMEANS_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: MLJS_IMAGE_KMEANS_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
+      tabular: { mljs: MLJS_KMEANS_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+      image: { mljs: MLJS_IMAGE_KMEANS_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
     },
     /**
      * **`'linear'`인데 잰 사다리는 내려간다** (2026-09-01 R17 감사 C-3). 그래도 안 바꾼다.
@@ -311,10 +387,15 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'gradient_boosting',
     dataTypes: { tabular: true, image: false },
     taskTypes: { classification: true, regression: true, clustering: false },
-    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
     maxRows: {
-      tabular: { mljs: MLJS_GRADIENT_BOOSTING_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+      tabular: {
+        mljs: MLJS_GRADIENT_BOOSTING_ROW_LIMIT,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: UNMEASURED,
+      },
+      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
     },
     baseline: {
       tabular: {
@@ -338,15 +419,56 @@ export const ALGORITHMS: readonly Algorithm[] = [
     id: 'dbscan',
     dataTypes: { tabular: true, image: false },
     taskTypes: { classification: false, regression: false, clustering: true },
-    runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false },
+    featureSource: 'embedding',
+    runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false, tfjs: false },
     maxRows: {
-      tabular: { mljs: MLJS_DBSCAN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED },
-      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+      tabular: { mljs: MLJS_DBSCAN_ROW_LIMIT, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+      image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
     },
     baseline: {
       // 거리 계산이 특성에 선형이다 — K-평균과 같은 자리다.
       tabular: { ms: MLJS_DBSCAN_BASELINE_MS, columns: 'linear' },
       image: UNMEASURED_BASELINE,
+    },
+  },
+  {
+    /**
+     * 합성곱 신경망 (open-decisions.md "합성곱을 직접 학습하는 길을 연다", 2026-10-20).
+     *
+     * **등록부에서 유일하게 화소를 받는 줄이다.** 나머지 전부는 백본이 만든 표 위에서
+     * 돌고, 이것은 **백본을 안 지난다** — 교과서가 가르치는 것이 그 합성곱층 자체다.
+     *
+     * **표 데이터는 닫았다.** 합성곱은 **이웃한 화소가 뜻을 나눈다**는 전제 위에 서는데
+     * 표의 열은 순서에 뜻이 없다 — 키와 몸무게가 "옆자리"인 것이 아니다. 열어 두면
+     * 학생이 고를 수 있고, 돌기는 돌면서 아무 뜻도 없는 결과가 나온다.
+     *
+     * **군집도 닫았다.** 정답 없이 합성곱을 학습시키는 방법은 교과서에 없고, 여기 열면
+     * 화면이 "무엇을 배우는 중인가"에 답할 말이 없다.
+     *
+     * **실행 방법이 `tfjs` 하나뿐이다.** ml.js에는 합성곱이 없고 sklearn에도 없다
+     * (`MLPClassifier`는 완전연결이다) — **등록부가 그 사실을 그대로 적는다.**
+     */
+    id: 'cnn',
+    dataTypes: { tabular: false, image: true },
+    taskTypes: { classification: true, regression: false, clustering: false },
+    featureSource: 'pixels',
+    runtimes: { mljs: false, 'pyodide-sklearn': false, 'server-sklearn': false, tfjs: true },
+    // 1,000장이 기본 손잡이에서 약 18초다 (2026-10-20 실측, limits.ts). **장당 17.8ms로
+    // 완전히 선형**이고, 같은 장수에서 사진 인공신경망(148초)보다 8배 빠르다 —
+    // 백본이 만든 1,280차원보다 64×64 화소가 싸다. **표 칸은 `dataTypes`가 이미 닫았다.**
+    maxRows: {
+      tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+      image: {
+        mljs: UNMEASURED,
+        'pyodide-sklearn': UNMEASURED,
+        tfjs: TFJS_IMAGE_CNN_ROW_LIMIT,
+      },
+    },
+    baseline: {
+      tabular: UNMEASURED_BASELINE,
+      // **`flat`이다.** 화소 수는 `CNN_INPUT_SIZE`가 고정하므로 특성이 변수가 아니다 —
+      // 변하는 것은 손잡이이고, 그 몫은 에포크 배수가 따로 받는다 (`ml/estimate.ts`).
+      image: { ms: TFJS_IMAGE_CNN_BASELINE_MS, columns: 'flat' },
     },
   },
 ]

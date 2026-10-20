@@ -12,6 +12,7 @@ import { runExperiment } from '../experiment'
 import { forestPoolFactory } from './forest-pool'
 import { knnPoolFactory } from './knn-pool'
 import { neuralPoolFactory } from './neural-pool'
+import { canvasPixelDecoder } from './pixel-draw'
 import type { TrainRequest, WorkerMessage, WorkerRequest } from './protocol'
 
 /**
@@ -31,6 +32,10 @@ export async function handleTrain(
       // 주입 자리다** — 검사와 재실행 대조는 안 줘서 직렬로 돌고, 결과는 같다
       // (open-decisions.md "학습을 코어로 가른다 — 결과는 코어 수와 무관하다").
       pools: { neural: neuralPoolFactory, forest: forestPoolFactory, knn: knnPoolFactory },
+      // **정본을 화소로 펴는 수단도 여기서 준다** (open-decisions.md "합성곱을 직접
+      // 학습하는 길을 연다"). 캔버스가 워커 전역이라 이 자리 말고는 줄 데가 없고,
+      // **화소를 받는 알고리즘을 아무도 안 고르면 한 번도 안 불린다.**
+      decodePixels: canvasPixelDecoder,
       onRunStart: ({ index, algorithm, runtime }, total) =>
         emit({ type: 'started', index, algorithm, runtime, total }),
       // 모델을 함께 싣는다. 이것이 없으면 취소가 지표만 건지고 모델은 워커와 함께

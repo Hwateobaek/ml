@@ -638,7 +638,9 @@ describe('테스트용 사진으로 채점한다', () => {
     }
 
     const table = imageTestDataset(applied, vectors, BACKBONE, 'classification')
-    expect(table?.rows).toHaveLength(2)
+    expect(table?.dataset.rows).toHaveLength(2)
+    // **사진도 같은 자리로 따라온다** — 화소를 받는 알고리즘이 같은 번호로 찾는다.
+    expect(table?.photos).toHaveLength(2)
   })
 
   /** 사진은 있는데 임베딩이 없으면 빈 표가 아니라 `null`이다. */

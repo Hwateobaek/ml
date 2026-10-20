@@ -10,6 +10,7 @@
  */
 
 import {
+  CNN_INPUT_SIZE,
   MLJS_DECISION_TREE_ROW_LIMIT,
   MLJS_IMAGE_DECISION_TREE_ROW_LIMIT,
   MLJS_IMAGE_RANDOM_FOREST_ROW_LIMIT,
@@ -27,6 +28,7 @@ import {
   type CalibrationJob,
 } from '../src/ml/calibration'
 import { fit } from '../src/ml/engines/mljs'
+import { fit as fitCnn } from '../src/ml/engines/tfjs-cnn'
 import { fitKMeans } from '../src/ml/engines/mljs-kmeans'
 import { fitNeural, type NeuralOptions } from '../src/ml/engines/neural'
 import { defaultsOf, parametersFor } from '../src/ml/hyperparams'
@@ -235,6 +237,52 @@ async function measureNeural(
     predict(features.slice(0, shown)),
   )
   return { elapsed: Math.round(performance.now() - started), iterations: fitted.epochs }
+}
+
+/**
+ * **합성곱 한 번** — 기본 손잡이로, 에포크를 다 돈다
+ * (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+ *
+ * **`measure`를 안 쓴다.** 저쪽은 `syntheticData`가 만든 **표**를 먹이는데 합성곱이
+ * 받는 것은 **화소**이고, 길이가 `64 × 64 × 3`이라 열 축이 아예 다르다.
+ *
+ * **사진을 디코드하지 않는다.** 재려는 것은 역전파가 얼마나 걸리느냐이고, 디코드는
+ * 그 앞 단계다 — 섞으면 무엇이 느린지 못 가른다. 그래서 화소 자리에 난수를 넣는다.
+ *
+ * **라벨이 화소와 무관하다.** 신경망 사다리와 같은 이유다 — 쉬운 데이터는 손실이 금세
+ * 평평해지고, 그러면 **천장이 아니라 운을 재게 된다.** 합성곱은 설정한 에포크를 끝까지
+ * 도므로(케라스가 그렇다) 그 걱정이 덜하지만, 같은 자리를 같은 방법으로 잰다.
+ *
+ * **브라우저에서만 돈다.** `tfjs-layers`가 WebGL을 찾고, 노드에는 그것이 없다 —
+ * 상한을 정하는 숫자는 어차피 **학생의 브라우저**에서 나와야 한다.
+ */
+async function measureCnn(rows: number): Promise<LadderResult> {
+  let state = 42
+  const random = (): number => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 4294967296
+  }
+  const columns = CNN_INPUT_SIZE * CNN_INPUT_SIZE * 3
+  const features: number[][] = []
+  const target: string[] = []
+  for (let row = 0; row < rows; row += 1) {
+    features.push(Array.from({ length: columns }, () => random()))
+    target.push(random() < 0.5 ? 'a' : 'b')
+  }
+
+  const started = performance.now()
+  const fitted = await fitCnn('cnn', {
+    features,
+    rowIndices: features.map((_unused, index) => index),
+    target,
+    taskType: 'classification',
+    hyperparameters: defaultsOf(parametersFor('tfjs', 'cnn')),
+    randomState: 42,
+  })
+  // **예측과 평가까지 지나간다** — 다른 사다리와 같은 자리를 재려면 그래야 한다.
+  const shown = Math.max(1, Math.round(rows * PREDICT_RATIO))
+  evaluate('classification', target.slice(0, shown), fitted.predict(features.slice(0, shown)))
+  return { elapsed: Math.round(performance.now() - started) }
 }
 
 /** 점 하나의 결과. **반복 횟수는 K-평균만 답한다.** */
@@ -783,6 +831,26 @@ export const LADDERS: readonly Ladder[] = [
     job: (rows) => ({ algorithm: 'neural_network', rows, columns: IMAGE_FEATURES }),
     run: (rows) => measureNeural(rows, IMAGE_FEATURES, 1, 100),
     // **행에 선형이다** — 실측 148ms/장이 네 점에서 그대로다 (`limits.ts`).
+    growth: 1,
+  },
+  {
+    /**
+     * **합성곱만 백본을 안 지난다.** 다른 사진 사다리는 전부 1,280차원 임베딩 위에서
+     * 도는데 이것은 64×64×3 화소를 받는다 — 그래서 `IMAGE_FEATURES`가 아니다.
+     *
+     * **브라우저에서만 숫자가 나온다** (`measureCnn`). 노드에는 WebGL이 없다.
+     */
+    id: 'image_cnn',
+    label: '[사진] 합성곱 신경망 · 장 수 (기본 손잡이, 에포크 5)',
+    axis: 'rows',
+    points: [50, 100, 200, 400, 800],
+    job: (rows) => ({
+      algorithm: 'cnn',
+      rows,
+      columns: CNN_INPUT_SIZE * CNN_INPUT_SIZE * 3,
+    }),
+    run: (rows) => measureCnn(rows),
+    // **행에 선형이다** — 에포크가 고정이고 한 장이 지나가는 비용이 같다.
     growth: 1,
   },
   {

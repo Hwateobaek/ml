@@ -30,6 +30,13 @@ import {
   parameters as pyodideParameters,
   resolve as pyodideResolve,
 } from './pyodide-sklearn'
+import {
+  TFJS_ALGORITHMS,
+  TFJS_ENGINE,
+  fit as tfjsFit,
+  parameters as tfjsParameters,
+  resolve as tfjsResolve,
+} from './tfjs-cnn'
 
 export type { FitInput, FitResult, Predict } from './mljs'
 
@@ -104,6 +111,20 @@ export const ENGINES: readonly TrainingEngine[] = [
     parameters: pyodideParameters,
     resolve: pyodideResolve,
     fit: pyodideFit,
+  },
+  {
+    /**
+     * 합성곱을 직접 학습하는 엔진 (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+     *
+     * **번들에 TF.js를 끌고 오지 않는다.** 여기 임포트하는 `tfjs-cnn.ts`는 손잡이 표와
+     * 함수 셋뿐이고, 라이브러리는 `fit`이 처음 불릴 때 들어온다.
+     */
+    runtimeId: 'tfjs',
+    engine: TFJS_ENGINE,
+    algorithms: TFJS_ALGORITHMS,
+    parameters: tfjsParameters,
+    resolve: tfjsResolve,
+    fit: tfjsFit,
   },
 ]
 

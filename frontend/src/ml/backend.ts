@@ -107,7 +107,7 @@ export function reasonParams(
  * 구현이 있는지는 알고리즘마다 다르고, 사람이 하나씩 판단해야 하는 것이다. 배열이었을
  * 때는 아무 일도 안 일어났다.
  */
-export const RUNTIME_IDS = ['mljs', 'pyodide-sklearn', 'server-sklearn'] as const
+export const RUNTIME_IDS = ['mljs', 'pyodide-sklearn', 'server-sklearn', 'tfjs'] as const
 
 export type RuntimeId = (typeof RUNTIME_IDS)[number]
 
@@ -120,7 +120,7 @@ export type RuntimeId = (typeof RUNTIME_IDS)[number]
  * **RUNTIMES와 어긋나면 안 된다.** 타입은 이걸 못 잡으므로 tests/runtime-options.spec.ts가
  * 두 목록을 대조한다.
  */
-export const BROWSER_RUNTIME_IDS = ['mljs', 'pyodide-sklearn'] as const
+export const BROWSER_RUNTIME_IDS = ['mljs', 'pyodide-sklearn', 'tfjs'] as const
 
 export type BrowserRuntimeId = (typeof BROWSER_RUNTIME_IDS)[number]
 
@@ -203,6 +203,22 @@ export const RUNTIMES: readonly RuntimeSpec[] = [
     id: 'server-sklearn',
     location: 'server',
     engineKind: 'sklearn',
+    needsPreparation: false,
+    preparable: false,
+  },
+  {
+    /**
+     * 합성곱을 직접 학습하는 자리 (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+     *
+     * **`needsPreparation`이 거짓이다.** 백본과 다르다 — 저쪽은 12.4MB짜리 가중치를
+     * 원본에서 받아야 하고 이쪽은 **빈 모델에서 시작한다.** 내려받을 것이 없다.
+     *
+     * 라이브러리(`tfjs-layers`) 자체는 워커가 처음 쓸 때 지연 로딩하는데, 그것은 번들
+     * 조각이라 **준비 단계가 아니다** — 백본 러너가 `tfjs-core`를 그렇게 쓰는 것과 같다.
+     */
+    id: 'tfjs',
+    location: 'browser',
+    engineKind: 'tfjs',
     needsPreparation: false,
     preparable: false,
   },

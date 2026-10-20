@@ -63,12 +63,22 @@ const algorithm = computed(
  * 자리에서 시작해야 한다. 그것이 이 모델에서 안 되면 되는 것 중 첫째로 넘어간다.
  */
 const runtime = computed(() => {
-  if (pickedRuntime.value !== null) return pickedRuntime.value
-
   const list = props.options.find((option) => option.algorithm.id === algorithm.value)?.runtimes
-  const wanted = list?.find((one) => one.runtime.id === props.preferredRuntime)
-  const fallback = wanted?.enabled ? wanted : list?.find((one) => one.enabled)
-  return fallback?.runtime.id ?? props.preferredRuntime
+  /**
+   * **학생이 고른 것이 먼저다.** 그다음이 실험 기본(지난번에 이 프로젝트가 쓰던 것)이다.
+   */
+  const asked = pickedRuntime.value ?? props.preferredRuntime
+  const wanted = list?.find((one) => one.runtime.id === asked)
+  if (wanted?.enabled) return wanted.runtime.id
+
+  /**
+   * **고른 자리에서 안 돌면 되는 자리로 옮긴다** (2026-10-20). 전에는 학생이 한 번
+   * 고르고 나면(`pickedRuntime`) 그 값이 그대로 걸려서, **그 엔진에 구현이 없는 모델은
+   * 영영 못 골랐다** — 모델 칸과 실행 방법 칸이 서로를 잠근다 (`ml/selection.ts`의
+   * `modelAxes`). 학습 쪽이 이미 하는 일을 고르는 쪽도 한다.
+   */
+  const fallback = list?.find((one) => one.enabled)
+  return fallback?.runtime.id ?? asked
 })
 
 const axes = computed(() =>

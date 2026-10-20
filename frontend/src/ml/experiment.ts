@@ -39,7 +39,13 @@ import type {
   TaskType,
   Warning,
 } from '../project/schema'
-import { algorithmOptions, type Algorithm, type AlgorithmOption } from './algorithms'
+import {
+  algorithmOptions,
+  type Algorithm,
+  type AlgorithmOption,
+  type FeatureSource,
+} from './algorithms'
+import type { PixelDecoder } from './pixel-features'
 import {
   reasonParams,
   type RuntimeContext,
@@ -95,6 +101,21 @@ export interface ExperimentInput {
    * 넘기므로 파일에 남는 값이 안 바뀐다.
    */
   snapshot: Experiment['settings']['data']
+  /**
+   * 정본 사진 바이트. **행 번호가 `dataset`과 같은 자리를 가리킨다.**
+   *
+   * **화소를 받는 알고리즘에만 쓴다** (`ml/algorithms.ts`의 `featureSource`). 그런
+   * 알고리즘을 아무도 안 골랐으면 이 칸은 비고, 그때 사진은 한 장도 안 열린다.
+   *
+   * **바이트 그대로다.** 여기서 화소로 펴면 사진 300장이 150MB이고, 그것을
+   * `postMessage`에 태우는 것이 저사양 교실 PC가 먼저 무너지는 자리다 —
+   * 펴는 일은 `options.decodePixels`가 **훈련·시험 몫에만** 한다.
+   */
+  photos?: readonly Uint8Array[]
+  /**
+   * `provided` 분할의 테스트 사진. **`testDataset`과 같은 자리를 가리킨다.**
+   */
+  testPhotos?: readonly Uint8Array[]
 }
 
 export interface ExperimentOptions {
@@ -111,6 +132,16 @@ export interface ExperimentOptions {
    * "학습을 코어로 가른다 — 결과는 코어 수와 무관하다").
    */
   pools?: ComputePools
+  /**
+   * 정본 바이트를 화소 행렬로 펴는 수단 (`ml/pixel-features.ts`).
+   *
+   * **주입한다.** `OffscreenCanvas`도 `createImageBitmap`도 워커 전역이라, 여기 박으면
+   * 이 함수가 노드에서 못 돈다 — `createEmbedWorker`와 같은 자리이고 같은 이유다.
+   * **실물은 학습 워커가 준다** (`ml/worker/handler.ts`).
+   *
+   * 없으면 화소를 받는 알고리즘이 `ENGINE_NOT_WIRED`로 실패한다 — 다른 모델은 계속 돈다.
+   */
+  decodePixels?: PixelDecoder
   /**
    * 모델 하나를 **시작할 때마다** (mlpx-spec.md §0.3). 워커 껍데기가 이걸 postMessage로
    * 바꾼다.
@@ -524,6 +555,14 @@ interface TrainContext {
   /** trainFeatures[i]의 원본 행 번호. 참조형 모델이 이것을 담는다 (mlpx-spec.md 5.1). */
   trainRowIndices: readonly number[]
   testFeatures: number[][]
+  /**
+   * 화소로 편 훈련·시험 몫. **화소를 받는 알고리즘을 골랐을 때만 채워진다**
+   * (`ml/algorithms.ts`의 `featureSource`).
+   *
+   * **줄 수와 순서가 위 둘과 같다.** 같은 분할을 쓰므로 그렇고, 그래야
+   * *"같은 데이터로 전이학습과 합성곱을 비교했다"*가 참이 된다.
+   */
+  pixelFeatures?: { train: number[][]; test: number[][] }
   trainTarget: string[]
   testTarget: string[]
   randomState: number
@@ -587,11 +626,32 @@ type RunBase = Pick<Run, 'id' | 'algorithm' | 'hyperparameters' | 'trainedAt'>
  * **다만 원문을 버리지는 않는다** - failureDetail이 params.detail에 실어 보낸다.
  * 코드를 라이브러리 결함 수만큼 늘리지 않으면서도 "실패"만 뜨는 상태를 피하는 방법이다.
  */
+/**
+ * 이 알고리즘에 먹일 훈련·시험 행렬 (`ml/algorithms.ts`의 `featureSource`).
+ *
+ * **등록부가 고른다. 알고리즘 이름으로 가르지 않는다** — `if (algorithm === 'cnn')`을
+ * 쓰면 둘째 화소 알고리즘이 들어온 날 이 자리를 아무도 다시 안 본다.
+ *
+ * **화소를 달라는데 없으면 던진다.** 조용히 임베딩을 먹이면 합성곱이 **1,280칸짜리
+ * 한 줄**을 사진으로 알고 돌면서 아무 오류도 안 낸다 — 이 저장소가 규정한 최악이 그것이다.
+ */
+function featuresFor(
+  source: FeatureSource,
+  context: TrainContext,
+): { train: number[][]; test: number[][] } {
+  if (source === 'embedding') {
+    return { train: context.trainFeatures, test: context.testFeatures }
+  }
+  if (!context.pixelFeatures) throw new ClientError('ENGINE_NOT_WIRED', { runtime: 'tfjs' })
+  return context.pixelFeatures
+}
+
 async function trainOne(
   base: RunBase,
   runtime: RuntimeSpec,
   engine: TrainingEngine,
   context: TrainContext,
+  featureSource: FeatureSource,
 ): Promise<{ run: Run; model?: ModelFile }> {
   const stamp = {
     ...base,
@@ -605,9 +665,13 @@ async function trainOne(
     // try 안이라 **이 run 하나만 실패하고 나머지 모델은 계속 돈다** (mlpx-spec.md 4.1).
     assertInRange(engine.parameters(base.algorithm), base.hyperparameters)
 
+    // **무엇을 먹일지는 등록부가 답한다** (위 `featuresFor`). 화소를 달라는데 없으면
+    // 여기서 던지고, 이 run 하나만 실패한다.
+    const feed = featuresFor(featureSource, context)
+
     const { predict, predictBatch, model, modelOmittedDetail, warning, clusterResult } =
       await engine.fit(base.algorithm, {
-        features: context.trainFeatures,
+        features: feed.train,
         rowIndices: context.trainRowIndices,
         target: context.trainTarget,
         taskType: context.taskType,
@@ -623,7 +687,7 @@ async function trainOne(
     if (context.taskType === 'clustering') {
       if (!clusterResult) throw new ClientError('JOB_FAILED', { taskType: 'clustering' })
       evaluation = evaluateCluster(
-        context.trainFeatures,
+        feed.train,
         clusterResult.assignments,
         clusterResult.centroids,
         // 실루엣 표본이 이 씨앗으로 뽑힌다. 분할과 같은 값이라 파일 하나로 재현된다.
@@ -633,9 +697,7 @@ async function trainOne(
       // **채점을 코어로 가를 수 있으면 그렇게 한다** (open-decisions.md "학습을 코어로
       // 가른다 — 결과는 코어 수와 무관하다"). 손을 내주는 것은 지금 KNN 하나이고,
       // 없으면 여기 그대로 동기 예측이다 — **답은 어느 쪽이든 같다.**
-      const predicted = predictBatch
-        ? await predictBatch(context.testFeatures)
-        : predict(context.testFeatures)
+      const predicted = predictBatch ? await predictBatch(feed.test) : predict(feed.test)
       evaluation = evaluate(context.taskType, context.testTarget, predicted)
     }
 
@@ -739,6 +801,26 @@ export async function runExperiment(
       option,
     ]),
   )
+
+  /**
+   * **화소는 달라는 사람이 있을 때만 편다** (open-decisions.md "합성곱을 직접 학습하는
+   * 길을 연다"). 아무도 안 골랐으면 사진은 한 장도 안 열린다 — 임베딩만 쓰는 학생이
+   * 디코드 비용을 치를 이유가 없다.
+   *
+   * **훈련·시험 몫만 편다.** 뽑기에서 빠진 사진은 어차피 안 쓰고, 펴 놓으면 그만큼이
+   * 그대로 메모리다 (사진 한 장이 64×64×3).
+   */
+  const wantsPixels = settings.selectedAlgorithms.some(
+    (selection) => available.get(selection.algorithm)?.algorithm.featureSource === 'pixels',
+  )
+  if (wantsPixels && options.decodePixels && input.photos) {
+    const photos = input.photos
+    const testPhotos = settings.split.method === 'provided' ? (input.testPhotos ?? []) : photos
+    trainContext.pixelFeatures = {
+      train: await options.decodePixels(split.trainIndices.map((row) => photos[row]!)),
+      test: await options.decodePixels(split.testIndices.map((row) => testPhotos[row]!)),
+    }
+  }
 
   const startedAt = now()
   const total = settings.selectedAlgorithms.length
@@ -848,7 +930,13 @@ export async function runExperiment(
         failure: { code: reason, params: reasonParams(reason, maxRows) },
       })
     } else {
-      const trained = await trainOne(base, runtime, engine, trainContext)
+      const trained = await trainOne(
+        base,
+        runtime,
+        engine,
+        trainContext,
+        option.algorithm.featureSource,
+      )
       runs.push(trained.run)
       if (trained.model) models.set(trained.run.id, trained.model)
     }

@@ -28,8 +28,8 @@ import {
  * 판정 규칙이고, 실측값은 등록부의 사실이라 바뀐다.
  */
 const unmeasured = {
-  tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
-  image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+  tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+  image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
 } as const
 
 /** 표본은 시간도 안 쟀다. 빈 표는 예상을 못 낸다는 뜻이다. */
@@ -38,7 +38,7 @@ const noBaseline = { tabular: UNMEASURED_BASELINE, image: UNMEASURED_BASELINE } 
 /** 셋 다 도는 알고리즘. 결정트리가 그렇다. */
 const anywhere: AlgorithmSpec = {
   id: 'decision_tree',
-  runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+  runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
   maxRows: unmeasured,
   baseline: noBaseline,
 }
@@ -46,7 +46,7 @@ const anywhere: AlgorithmSpec = {
 /** 무거워서 서버에서만 도는 것. */
 const serverOnly: AlgorithmSpec = {
   id: 'gradient_boosting',
-  runtimes: { mljs: false, 'pyodide-sklearn': false, 'server-sklearn': true },
+  runtimes: { mljs: false, 'pyodide-sklearn': false, 'server-sklearn': true, tfjs: false },
   maxRows: unmeasured,
   baseline: noBaseline,
 }
@@ -54,7 +54,7 @@ const serverOnly: AlgorithmSpec = {
 /** 순수 JS 구현이 없어 sklearn에서만 도는 것. */
 const sklearnOnly: AlgorithmSpec = {
   id: 'svm',
-  runtimes: { mljs: false, 'pyodide-sklearn': true, 'server-sklearn': true },
+  runtimes: { mljs: false, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
   maxRows: unmeasured,
   baseline: noBaseline,
 }
@@ -222,8 +222,8 @@ describe('데이터 크기', () => {
     const uneven: AlgorithmSpec = {
       ...anywhere,
       maxRows: {
-        tabular: { mljs: 100, 'pyodide-sklearn': 1000 },
-        image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+        tabular: { mljs: 100, 'pyodide-sklearn': 1000, tfjs: UNMEASURED },
+        image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
       },
     }
     const options = runtimeOptions(uneven, context({ rowCount: 500, engineStates: ready }))
@@ -237,8 +237,8 @@ describe('데이터 크기', () => {
     const uneven: AlgorithmSpec = {
       ...anywhere,
       maxRows: {
-        tabular: { mljs: 1000, 'pyodide-sklearn': UNMEASURED },
-        image: { mljs: 100, 'pyodide-sklearn': UNMEASURED },
+        tabular: { mljs: 1000, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+        image: { mljs: 100, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
       },
     }
     const rowCount = 500
@@ -255,8 +255,8 @@ describe('데이터 크기', () => {
     const partly: AlgorithmSpec = {
       ...anywhere,
       maxRows: {
-        tabular: { mljs: BROWSER_ROW_LIMIT * 4, 'pyodide-sklearn': UNMEASURED },
-        image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+        tabular: { mljs: BROWSER_ROW_LIMIT * 4, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+        image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
       },
     }
     const context4x = context({ rowCount: BROWSER_ROW_LIMIT * 2, engineStates: ready })
@@ -323,6 +323,9 @@ describe('파일에 남는 값', () => {
       ['pyodide-sklearn', 'browser', 'pyodide-sklearn'],
       // 같은 sklearn이지만 WASM과 네이티브는 숫자가 갈린다. 그래서 실행 방법이 다르다.
       ['server-sklearn', 'server', 'sklearn'],
+      // 합성곱은 역전파가 필요해 순수 JS로는 못 돈다 (open-decisions.md "합성곱을 직접
+      // 학습하는 길을 연다"). 받을 것이 없어 `needsPreparation`이 거짓이다.
+      ['tfjs', 'browser', 'tfjs'],
     ])
   })
 

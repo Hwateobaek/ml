@@ -79,7 +79,7 @@ describe('등록부', () => {
     }
   })
 
-  it('순수 JS 칸은 전부 재 본 값이다', () => {
+  it('그 알고리즘을 돌리는 엔진의 칸은 재 본 값이다', () => {
     // **전역 기본값에 얹혀 있는 줄이 없어야 한다.** 일곱 줄 전부 실측이 있고
     // (open-decisions.md #13), 비워 두면 다음에 전역을 올리는 사람이 그 알고리즘까지
     // 대신 허락하게 된다. 값이 안 바뀌는 랜덤포레스트도 그래서 적혀 있다.
@@ -89,10 +89,20 @@ describe('등록부', () => {
     //
     // **다루는 종류의 칸만 요구한다** - 등록부가 닫아 둔 칸(회귀의 이미지)은 판정이
     // 닿지 않는 자리라 지어낸 숫자보다 `UNMEASURED`가 정직하다.
+    //
+    // **`mljs`를 이름으로 묻지 않는다** (2026-10-20). 그 엔진에서 아예 안 도는
+    // 알고리즘이 들어오면서(`cnn`은 `tfjs` 하나뿐이다) **있어서는 안 되는 상수를
+    // 내놓으라고 조르는 검사**가 됐다. 묻는 것은 그대로다 — *"이 줄이 전역 기본값에
+    // 얹혀 있지 않은가"*이고, 그 답은 **돌릴 수 있는 엔진 중 하나라도 재어졌는가**다.
     for (const algorithm of ALGORITHMS) {
       for (const dataType of DATA_TYPES) {
         if (!algorithm.dataTypes[dataType]) continue
-        expect(algorithm.maxRows[dataType].mljs, `${algorithm.id}/${dataType}`).toBeTypeOf('number')
+        const measured = BROWSER_RUNTIME_IDS.filter(
+          (runtimeId) =>
+            algorithm.runtimes[runtimeId] &&
+            typeof algorithm.maxRows[dataType][runtimeId] === 'number',
+        )
+        expect(measured, `${algorithm.id}/${dataType}`).not.toHaveLength(0)
       }
     }
   })
@@ -234,7 +244,9 @@ describe('못 쓰는 이유가 쓸모 있어야 한다', () => {
 
   it('잠겨 있어도 실행 방법별 판정을 함께 준다 - 무엇을 하면 되는지 알아야 한다', () => {
     const option = algorithmOptions(tabularClassification, context(), [SKLEARN_ONLY_ALGORITHM])[0]
-    expect(option?.runtimes).toHaveLength(3)
+    // **실행 방법 수를 세어 둔다.** 숫자를 박아 두면 실행 방법이 늘어날 때마다 여기가
+    // 울고, 그때 고치는 사람이 "판정이 전부 왔는가"가 아니라 숫자를 본다.
+    expect(option?.runtimes).toHaveLength(RUNTIME_IDS.length)
     expect(option?.runtimes.find((r) => r.runtime.id === 'mljs')?.reason).toBe(
       'ALGORITHM_NOT_AVAILABLE_HERE',
     )
@@ -254,11 +266,22 @@ describe('분기 없이 늘어난다', () => {
     expect(options).toHaveLength(ALGORITHMS.length)
     const enabled = enabledAlgorithms(options)
     expect(enabled.map((a) => a.id)).toEqual(['k_means', 'dbscan'])
+    /**
+     * **사유의 우선순위가 여기서 보인다** (`ml/algorithms.ts`의 머리말): 데이터 종류가
+     * 과제 유형보다 먼저다. 표를 아예 안 하는 알고리즘(`cnn`)은 표 프로젝트에서
+     * *"이 유형에 없다"*가 아니라 *"이 데이터 종류에 없다"*라고 말해야 한다 —
+     * 합성곱을 쓰려는 학생이 할 일은 유형을 바꾸는 것이 아니라 사진을 올리는 것이다.
+     */
     expect(
       options
         .filter((o) => !['k_means', 'dbscan'].includes(o.algorithm.id))
-        .every((o) => o.reason === 'ALGORITHM_NOT_FOR_TASK_TYPE'),
-    ).toBe(true)
+        .map((o) => [o.algorithm.id, o.reason] as const)
+        .filter(([id, reason]) =>
+          ALGORITHMS.find((a) => a.id === id)?.dataTypes.tabular
+            ? reason !== 'ALGORITHM_NOT_FOR_TASK_TYPE'
+            : reason !== 'ALGORITHM_NOT_FOR_DATA_TYPE',
+        ),
+    ).toEqual([])
   })
 
   it('등록부를 넘기면 그것만 본다 - 새 항목이 코드 변경 없이 들어온다', () => {
@@ -267,11 +290,12 @@ describe('분기 없이 늘어난다', () => {
         id: 'kmeans',
         dataTypes: { tabular: true, image: true },
         taskTypes: { classification: false, regression: false, clustering: true },
-        runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false },
+        featureSource: 'embedding',
+        runtimes: { mljs: true, 'pyodide-sklearn': false, 'server-sklearn': false, tfjs: false },
         // 아직 아무도 안 쟀다. 군집을 실제로 넣는 날 이 칸이 숫자를 요구한다.
         maxRows: {
-          tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
-          image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+          tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+          image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
         },
         baseline: { tabular: UNMEASURED_BASELINE, image: UNMEASURED_BASELINE },
       },
@@ -317,22 +341,42 @@ describe('enabledAlgorithms', () => {
 describe('행 상한 칸에 제 이름의 상수가 온다', () => {
   const SOURCE = readFileSync(join(process.cwd(), 'src', 'ml', 'algorithms.ts'), 'utf-8')
 
-  /** 알고리즘 id -> { tabular, image } 의 mljs 상수 이름. 소스에서 글자로 읽는다. */
-  function cells(): Map<string, { tabular: string | undefined; image: string | undefined }> {
-    const found = new Map<string, { tabular: string | undefined; image: string | undefined }>()
+  /**
+   * 알고리즘 id -> (데이터 종류 -> 실행 방법 -> 상수 이름). 소스에서 글자로 읽는다.
+   *
+   * **실행 방법마다 읽는다** (2026-10-20). 전에는 `mljs` 칸만 봤는데, 그 엔진에서
+   * 아예 안 도는 알고리즘이 들어오면서(`cnn`은 `tfjs` 하나뿐이다) **그 칸이 영영
+   * `UNMEASURED`**가 됐다 — 검사가 "`MLJS_IMAGE_CNN_ROW_LIMIT`이 없다"고 우는데
+   * 그런 상수는 있어서도 안 되는 것이다.
+   *
+   * **줄바꿈을 견딘다.** 칸이 셋이 되면서 prettier가 줄을 접었고, 한 줄짜리 정규식이
+   * 알고리즘 **전부**를 "(없다)"로 읽었다 — 그때도 검사는 울었지만, 이렇게 **쉽게
+   * 눈먼다**는 것이 이 자리의 성질이라 아래 "읽을 칸을 실제로 찾는다"가 함께 선다.
+   */
+  function cells(): Map<string, Record<string, Record<string, string | undefined>>> {
+    const found = new Map<string, Record<string, Record<string, string | undefined>>>()
     // **id로 자른다.** 한 조각이 알고리즘 하나이므로 조각 안에서 찾은 칸은 그 알고리즘의
     // 것이다 - 블록의 끝을 정규식으로 맞히려 들면 들여쓰기에 매달린다.
     const chunks = SOURCE.split(/id: '/).slice(1)
     for (const chunk of chunks) {
       const id = /^([a-z_]+)'/.exec(chunk)?.[1]
       if (id === undefined) continue
-      found.set(id, {
-        tabular: /tabular: \{ mljs: (\w+)/.exec(chunk)?.[1],
-        image: /image: \{ mljs: (\w+)/.exec(chunk)?.[1],
-      })
+      const perType: Record<string, Record<string, string | undefined>> = {}
+      for (const dataType of DATA_TYPES) {
+        // 그 종류의 칸 하나를 통째로 집는다. `s` 플래그라 접힌 줄도 한 덩어리다.
+        const block = new RegExp(`${dataType}: \\{(.*?)\\}`, 's').exec(chunk)?.[1] ?? ''
+        perType[dataType] = {
+          mljs: /\bmljs: (\w+)/.exec(block)?.[1],
+          tfjs: /\btfjs: (\w+)/.exec(block)?.[1],
+        }
+      }
+      found.set(id, perType)
     }
     return found
   }
+
+  /** 이 알고리즘이 그 실행 방법에서 실제로 도는가. 안 돌면 상한도 없어야 한다. */
+  const RUNTIME_PREFIX: Readonly<Record<string, string>> = { mljs: 'MLJS_', tfjs: 'TFJS_' }
 
   /** `k_means` -> `KMEANS`, `decision_tree` -> `DECISIONTREE`. 밑줄은 이름마다 달라 접는다. */
   const core = (text: string) => text.toUpperCase().replace(/_/g, '')
@@ -347,11 +391,19 @@ describe('행 상한 칸에 제 이름의 상수가 온다', () => {
       const wrong: string[] = []
       for (const algorithm of ALGORITHMS) {
         if (!algorithm.dataTypes[dataType]) continue
-        const name = cells().get(algorithm.id)?.[dataType]
-        const prefix = dataType === 'image' ? 'MLJS_IMAGE_' : 'MLJS_'
-        const expected = core(`${prefix}${algorithm.id}_ROW_LIMIT`)
-        if (name === undefined || core(name) !== expected) {
-          wrong.push(`${algorithm.id}.${dataType} = ${name ?? '(없다)'}`)
+        for (const [runtime, prefix] of Object.entries(RUNTIME_PREFIX)) {
+          // 그 엔진에 이 알고리즘 구현이 없으면 상한도 없다 — `UNMEASURED`가 정답이다.
+          if (!algorithm.runtimes[runtime as keyof typeof algorithm.runtimes]) continue
+          const name = cells().get(algorithm.id)?.[dataType]?.[runtime]
+          // **안 잰 칸은 여기서 안 본다.** 이름이 없는 것이 정상이고, 재 보라고 미는
+          // 일은 `estimate.spec.ts`의 "사진을 여는 알고리즘마다 사진 상한이 있다"가 한다.
+          if (name === 'UNMEASURED') continue
+          const expected = core(
+            `${prefix}${dataType === 'image' ? 'IMAGE_' : ''}${algorithm.id}_ROW_LIMIT`,
+          )
+          if (name === undefined || core(name) !== expected) {
+            wrong.push(`${algorithm.id}.${dataType}.${runtime} = ${name ?? '(없다)'}`)
+          }
         }
       }
       expect(wrong, 'swapping these starts training at a size the student cannot run').toEqual([])

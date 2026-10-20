@@ -557,6 +557,10 @@ async function startTraining(): Promise<void> {
         // **파일에 남는 것은 계산에 쓴 설정이 아니라 기록이다.** 이미지는 둘이 갈린다
         // (open-decisions.md "이미지 학습은 표 문제로 바꿔서 푼다").
         snapshot: source.snapshot,
+        // **화소를 받는 알고리즘이 있을 때만 열린다** (open-decisions.md "합성곱을
+        // 직접 학습하는 길을 연다"). 표에서는 둘 다 없고, 그때 워커는 사진을 안 본다.
+        ...(source.photos ? { photos: source.photos } : {}),
+        ...(source.testPhotos ? { testPhotos: source.testPhotos } : {}),
       },
       history: file.document.runs,
     })

@@ -23,7 +23,23 @@ const notices = thirdPartyNotices()
 // Tailwind v4는 설정 파일이 없다. 테마는 src/styles/theme.css 안에서 정의한다.
 export default defineConfig({
   plugins: [vue(), tailwindcss(), notices.emit],
-  worker: { plugins: () => [notices.collect] },
+  /**
+   * **워커를 모듈로 굽는다** (2026-10-20, 사본 소유자가 골랐다 —
+   * `open-decisions.md` "워커를 모듈로 굽는다").
+   *
+   * 기본값 `iife`는 **코드 분할을 못 한다.** 그래서 워커가 `await import()`로 미뤄 둔
+   * 것까지 전부 자기 안에 구워 넣는데, 합성곱이 들어오면서 그 값이 드러났다 —
+   * 학습 워커가 **241KB에서 1.6MB로** 불었다. 표 데이터로 의사결정나무를 돌리는
+   * 학생도 매번 그만큼을 받는 것이라, 그건 치를 수 없는 값이다.
+   *
+   * **바꾸면 줄어드는 것이 합성곱만이 아니다.** 임베딩 워커가 **1.9MB에서 5KB로**
+   * 내려간다 — TF.js가 공용 조각이 되어 **쓰는 워커들이 나눠 쓰기** 때문이다.
+   *
+   * **대가는 브라우저 바닥이다.** 모듈 워커는 Firefox 114(2023-06) 이상을 요구한다.
+   * 크롬·엣지(80+)와 사파리(15+)는 이미 넘어서 있고, 이 저장소가 이미 요구하는
+   * `OffscreenCanvas`가 그와 비슷한 선이다.
+   */
+  worker: { format: 'es', plugins: () => [notices.collect] },
   /**
    * **배포 경로가 둘이라 base를 상대 경로로 고정한다.**
    *

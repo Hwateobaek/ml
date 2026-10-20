@@ -39,6 +39,7 @@
     "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
     "@tensorflow/tfjs-converter": "^4.22.0",
     "@tensorflow/tfjs-core": "^4.22.0",
+    "@tensorflow/tfjs-layers": "^4.22.0",
     "chart.js": "^4.5.1",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",

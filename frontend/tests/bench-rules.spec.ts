@@ -18,6 +18,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { CNN_INPUT_SIZE } from '../src/limits'
 import { ALGORITHMS } from '../src/ml/algorithms'
 import { backboneFor, DEFAULT_BACKBONE_ID } from '../src/ml/backbones'
 import { silhouetteSampleSize } from '../src/ml/metrics'
@@ -140,15 +141,27 @@ describe('실측 하니스는 배포본에 안 들어간다', () => {
 describe('등록부의 칸마다 사다리가 있다', () => {
   const IMAGE_FEATURES = backboneFor(DEFAULT_BACKBONE_ID)?.embeddingDim
 
+  /**
+   * 사진 한 장이 **그 알고리즘에게** 몇 칸인가.
+   *
+   * **등록부가 답한다** (`ml/algorithms.ts`의 `featureSource`). 전에는 "사진 = 임베딩
+   * 폭"이라고 못 박혀 있었는데, **백본을 안 지나는 알고리즘**이 들어오면서 그 말이
+   * 거짓이 됐다 — 합성곱이 받는 것은 1,280이 아니라 `64 × 64 × 3`이다.
+   */
+  function imageColumnsFor(algorithm: string): number | undefined {
+    const found = ALGORITHMS.find((one) => one.id === algorithm)
+    if (found?.featureSource === 'pixels') return CNN_INPUT_SIZE * CNN_INPUT_SIZE * 3
+    return IMAGE_FEATURES
+  }
+
   /** 사다리가 실제로 만드는 일감으로 판정한다. **이름이 아니라 일감이 무엇을 재는가다.** */
   function covers(algorithm: string, dataType: DataType): boolean {
+    const imageColumns = imageColumnsFor(algorithm)
     return ALL_LADDERS.some((ladder) =>
       ladder.points.some((point) => {
         const job = ladder.job(point)
         if (job.algorithm !== algorithm) return false
-        return dataType === 'image'
-          ? job.columns === IMAGE_FEATURES
-          : job.columns !== IMAGE_FEATURES
+        return dataType === 'image' ? job.columns === imageColumns : job.columns !== imageColumns
       }),
     )
   }

@@ -287,7 +287,18 @@ describe('세 축이 서로를 좁힌다', () => {
     })
   })
 
-  it('실행 방법이 모델을 좁힌다 - 순수 JS에 없는 모델은 순수 JS 축에서 꺼진다', () => {
+  /**
+   * **"그 엔진에 구현이 없다"로는 모델 칸을 끄지 않는다** (2026-10-20).
+   *
+   * 끄면 **실행 방법 집합이 겹치지 않는 모델을 영영 못 고른다** — 모델 칸은 걸린
+   * 실행 방법에서 안 돌아 꺼지고, 실행 방법 칸은 걸린 모델이 거기서 안 돌아 꺼진다.
+   * **두 축이 서로를 잠근다.** 합성곱(`tfjs` 하나뿐)이 그 첫 사례였고, 그 전까지는
+   * 모든 모델이 `mljs`를 지나서 길이 늘 있었다.
+   *
+   * 그때 할 일은 끄는 것이 아니라 **옮기는 것**이다 (`ModelAxes.vue`의 `runtime`).
+   * 학습 쪽이 이미 같은 일을 한다 (`chooseRuntime`).
+   */
+  it('그 엔진에 구현이 없을 뿐이면 끄지 않고 되는 자리로 옮긴다', () => {
     const options = algorithmOptions(
       { dataType: 'tabular', taskType: 'classification' },
       ONLINE,
@@ -295,11 +306,22 @@ describe('세 축이 서로를 좁힌다', () => {
     )
     const { algorithms } = axes({ options })
     expect(choice(algorithms, 'decision_tree')?.enabled).toBe(true)
-    expect(choice(algorithms, 'sklearn_only')).toEqual({
-      id: 'sklearn_only',
-      enabled: false,
-      reason: 'ALGORITHM_NOT_AVAILABLE_HERE',
-    })
+    // 서버가 살아 있어 갈 곳이 있다. 그래서 고를 수 있어야 한다.
+    expect(choice(algorithms, 'sklearn_only')).toEqual({ id: 'sklearn_only', enabled: true })
+  })
+
+  /** **갈 곳이 하나도 없으면 그때는 꺼진다.** 옮길 자리가 없는 것은 못 쓰는 것이다. */
+  it('어디서도 못 돌면 모델 칸이 꺼진다', () => {
+    const options = algorithmOptions(
+      { dataType: 'tabular', taskType: 'classification' },
+      OFFLINE,
+      withSklearnOnly(ALGORITHMS),
+    )
+    const card = choice(axes({ options }).algorithms, 'sklearn_only')
+    expect(card?.enabled).toBe(false)
+    // **어느 사유가 이기는지는 여기서 정하지 않는다** — 등록부가 우선순위를 안다
+    // (`ml/algorithms.ts`). 여기서 묻는 것은 **갈 곳이 없으면 꺼진다**는 것뿐이다.
+    expect(['ENGINE_NOT_WIRED', 'SERVER_UNAVAILABLE']).toContain(card?.reason)
   })
 
   /**
@@ -339,7 +361,12 @@ describe('세 축이 서로를 좁힌다', () => {
 
   it('서버가 없는 것은 정상 상태다 - 지우지 않고 사유와 함께 꺼 둔다', () => {
     const { runtimes } = axes()
-    expect(runtimes.map((one) => one.id)).toEqual(['mljs', 'pyodide-sklearn', 'server-sklearn'])
+    expect(runtimes.map((one) => one.id)).toEqual([
+      'mljs',
+      'pyodide-sklearn',
+      'server-sklearn',
+      'tfjs',
+    ])
     expect(choice(runtimes, 'server-sklearn')?.reason).toBe('SERVER_UNAVAILABLE')
     // 켤 자리가 아직 없어서 `ENGINE_NOT_READY`가 아니다 (`ml/backend.ts`의 `notReadyReason`).
     expect(choice(runtimes, 'pyodide-sklearn')?.reason).toBe('ENGINE_NOT_WIRED')

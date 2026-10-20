@@ -115,6 +115,14 @@ export interface ImageTrainingSource {
    * 사진으로 되돌려야 한다.
    */
   readonly hashes: readonly string[]
+  /**
+   * 정본 바이트. **`hashes`와 자리가 같다** — 표의 한 행이 여기 한 장이다.
+   *
+   * **화소를 받는 알고리즘이 쓴다** (`ml/algorithms.ts`의 `featureSource`). 아무도
+   * 안 고르면 아무도 안 읽는다 — 바이트는 이미 프로젝트에 있으므로 여기 담는 것
+   * 자체에는 비용이 없다(참조만 옮긴다).
+   */
+  readonly photos: readonly Uint8Array[]
 }
 
 /**
@@ -211,6 +219,7 @@ export function imageTrainingSource(
       rowsHash: rowsHashOf(entries.map((entry) => entry.hash)),
     },
     hashes: entries.map((entry) => entry.hash),
+    photos: entries.map((entry) => entry.bytes),
   }
 }
 
@@ -233,10 +242,12 @@ export function imageTestDataset(
   vectors: ReadonlyMap<string, Float32Array>,
   backbone: BackboneSpec,
   taskType: TaskType,
-): Dataset | null {
+): { dataset: Dataset; photos: readonly Uint8Array[] } | null {
   if (taskType === 'clustering') return null
 
   const rows: string[][] = []
+  /** **행과 자리가 같다** — 화소를 받는 알고리즘이 같은 번호로 찾는다. */
+  const photos: Uint8Array[] = []
   for (const entry of readImages(project, 'test')) {
     // 라벨 없는 사진은 채점할 정답이 없다. 입구가 이미 막지만(data/image/test-set.ts)
     // 여기서도 세지 않는다 - 훈련 표가 같은 자리에서 같은 것을 뺀다.
@@ -244,10 +255,14 @@ export function imageTestDataset(
     const vector = vectors.get(entry.hash)
     if (vector === undefined) continue
     rows.push([...Array.from(vector, (value) => String(value)), entry.category])
+    photos.push(entry.bytes)
   }
 
   if (rows.length === 0) return null
-  return { columns: [...embeddingColumns(backbone.embeddingDim), IMAGE_LABEL_COLUMN], rows }
+  return {
+    dataset: { columns: [...embeddingColumns(backbone.embeddingDim), IMAGE_LABEL_COLUMN], rows },
+    photos,
+  }
 }
 
 /**

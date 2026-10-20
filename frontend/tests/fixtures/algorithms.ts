@@ -16,8 +16,8 @@ import { UNMEASURED, UNMEASURED_BASELINE } from '../../src/ml/backend'
 
 /** 표본은 상한을 재지 않았다. 확인하는 것이 상한이 아니라 판정 규칙이다. */
 const UNMEASURED_ROWS = {
-  tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
-  image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED },
+  tabular: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
+  image: { mljs: UNMEASURED, 'pyodide-sklearn': UNMEASURED, tfjs: UNMEASURED },
 } as const
 
 /**
@@ -30,7 +30,8 @@ export const SKLEARN_ONLY_ALGORITHM: Algorithm = {
   id: 'sklearn_only',
   dataTypes: { tabular: true, image: false },
   taskTypes: { classification: true, regression: false, clustering: false },
-  runtimes: { mljs: false, 'pyodide-sklearn': true, 'server-sklearn': true },
+  featureSource: 'embedding',
+  runtimes: { mljs: false, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
   maxRows: UNMEASURED_ROWS,
   baseline: NO_BASELINE,
 }
@@ -49,7 +50,8 @@ export const NOT_FOR_TABULAR_ALGORITHM: Algorithm = {
   id: 'not_for_tabular',
   dataTypes: { tabular: false, image: true },
   taskTypes: { classification: true, regression: false, clustering: false },
-  runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true },
+  featureSource: 'embedding',
+  runtimes: { mljs: true, 'pyodide-sklearn': true, 'server-sklearn': true, tfjs: false },
   maxRows: UNMEASURED_ROWS,
   baseline: NO_BASELINE,
 }

@@ -22,6 +22,7 @@
 import { ClientError } from '../errors'
 import { MLJS_PARAMETERS } from './engines/mljs-params'
 import { PYODIDE_SKLEARN_PARAMETERS } from './engines/pyodide-sklearn-params'
+import { TFJS_PARAMETERS } from './engines/tfjs-params'
 
 export interface HyperparameterSpec {
   /**
@@ -54,6 +55,7 @@ const PARAMETERS_BY_RUNTIME: Readonly<
 > = {
   mljs: MLJS_PARAMETERS,
   'pyodide-sklearn': PYODIDE_SKLEARN_PARAMETERS,
+  tfjs: TFJS_PARAMETERS,
 }
 
 /**

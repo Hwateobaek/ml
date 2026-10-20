@@ -540,8 +540,8 @@
     },
     {
       "file": "src/ml/experiment.ts",
-      "find": "      const predicted = predictBatch\n        ? await predictBatch(context.testFeatures)\n        : predict(context.testFeatures)",
-      "replace": "      const predicted = predict(context.testFeatures)",
+      "find": "      const predicted = predictBatch ? await predictBatch(feed.test) : predict(feed.test)",
+      "replace": "      const predicted = predict(feed.test)",
       "expect": "cries",
       "expectSpecs": ["tests/experiment.spec.ts"],
       "loses": "채점이 병렬 예측을 안 지나간다 — KNN의 2.36배가 조용히 사라진다 (R26 M12)"

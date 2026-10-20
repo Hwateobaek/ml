@@ -60,6 +60,10 @@ export const SUPPLIED: Readonly<Record<string, string>> = {
   '@tensorflow/tfjs-backend-webgpu': 'tensorflow-tfjs.txt',
   '@tensorflow/tfjs-converter': 'tensorflow-tfjs.txt',
   '@tensorflow/tfjs-core': 'tensorflow-tfjs.txt',
+  // **형제들과 다른 파일이다.** 이 패키지만 `Apache-2.0 AND MIT`이라(아래
+  // `ALLOWED_SPDX`) 전문이 둘 다 가야 한다 — 실제로 `MIT-style` 머리글을 단 파일이
+  // 스물일곱, Apache 머리글이 여덟이다.
+  '@tensorflow/tfjs-layers': 'tensorflow-tfjs-layers.txt',
   'median-quickselect': 'median-quickselect.txt',
   pretendard: 'pretendard.txt',
   seedrandom: 'seedrandom.txt',
@@ -188,8 +192,13 @@ export function readShipped(name: string): Shipped {
  * - OFL-1.1 — 글꼴(Pretendard). **글꼴과 함께** 라이선스를 동봉할 것을 요구하고,
  *   글꼴만 따로 파는 것을 막는다. 우리는 앱과 함께 싣는다.
  *
- * **이중 라이선스 표현식은 여기 넣지 마라.** `(MIT OR GPL-3.0-or-later)`에서 MIT을
- * 고르는 것은 사람의 결정이고, 그 결정은 PR에 적혀야 한다.
+ * **`OR` 표현식은 여기 넣지 마라.** `(MIT OR GPL-3.0-or-later)`에서 MIT을 고르는 것은
+ * 사람의 결정이고, 그 결정은 PR에 적혀야 한다.
+ *
+ * **`AND`는 다른 물건이다** (2026-10-20). 고르는 것이 아니라 **둘 다 걸려 있다**는
+ * 뜻이라, 할 일은 하나를 고르는 것이 아니라 **전문을 둘 다 싣는 것**이다. 그래서
+ * 이 목록에 들어올 수 있지만, **양쪽이 이미 따로 허용돼 있어야 하고 고지가 둘을 다
+ * 들고 있어야 한다** — 줄마다 그 사실을 적는다.
  */
 export const ALLOWED_SPDX: ReadonlySet<string> = new Set([
   'MIT',
@@ -197,6 +206,15 @@ export const ALLOWED_SPDX: ReadonlySet<string> = new Set([
   'Apache-2.0',
   'BSD-2-Clause',
   'OFL-1.1',
+  /**
+   * `@tensorflow/tfjs-layers` (합성곱 학습 — open-decisions.md "합성곱을 직접 학습하는
+   * 길을 연다"). **고르는 표현식이 아니다** — 패키지 안에 `MIT-style` 머리글을 단
+   * 파일이 스물일곱, Apache 머리글이 여덟이라 **둘 다 사실이다.**
+   *
+   * 양쪽 다 위에서 이미 허용돼 있고, 전문은 `licenses/tensorflow-tfjs-layers.txt`가
+   * 둘 다 들고 간다 (`SUPPLIED`). MIT 저장소 안에서 나눠 주는 데 걸리는 것이 없다.
+   */
+  'Apache-2.0 AND MIT',
 ])
 
 /**

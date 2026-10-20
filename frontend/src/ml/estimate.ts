@@ -26,6 +26,7 @@
 import {
   BASELINE_COLUMNS,
   MLJS_GRADIENT_BOOSTING_BASELINE_DEPTH,
+  CNN_BASELINE_EPOCHS,
   MLJS_GRADIENT_BOOSTING_BASELINE_TREES,
   MLJS_GRADIENT_BOOSTING_DEPTH_MS,
   MLJS_KMEANS_BASELINE_CLUSTERS,
@@ -248,6 +249,21 @@ function handleFactor(
         baseline) *
       (epochs / MLJS_NEURAL_NETWORK_BASELINE_EPOCHS)
     )
+  }
+  if (algorithm === 'cnn') {
+    /**
+     * **에포크만 센다** (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+     *
+     * 합성곱은 **수렴해도 안 멈추고** 설정한 바퀴를 끝까지 돈다(케라스가 그렇다) —
+     * 그래서 바퀴 수가 시간에 그대로 곱해진다. 기준표가 5바퀴로 재어져 있어 분모가
+     * 그 수다 (`CNN_BASELINE_EPOCHS`).
+     *
+     * **나머지 손잡이는 안 곱한다.** 필터 수·커널 크기·완전연결 뉴런 수가 시간에
+     * 어떻게 붙는지 **아직 안 쟀다** — 안 잰 것을 곱하지 않는다는 것이 이 파일의
+     * 전제다. 사다리(`tools/workloads.ts`의 `image_cnn`)가 그 축을 훑는 날 여기 는다.
+     */
+    const epochs = Math.max(1, numberOr(hyperparameters, 'epochs', CNN_BASELINE_EPOCHS))
+    return epochs / CNN_BASELINE_EPOCHS
   }
   if (algorithm === 'k_means') {
     const clusters = numberOr(hyperparameters, 'nClusters', MLJS_KMEANS_BASELINE_CLUSTERS)

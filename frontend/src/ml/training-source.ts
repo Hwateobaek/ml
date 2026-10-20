@@ -64,6 +64,15 @@ export interface TrainingSource {
    * 이미지는 사진 해시이고, 결과 화면이 그것으로 사진을 되찾는다.
    */
   readonly rowKeys?: readonly string[]
+  /**
+   * 정본 사진 바이트. **`dataset`의 행과 자리가 같다** — 표에는 없다.
+   *
+   * **화소를 받는 알고리즘이 쓴다** (`ml/algorithms.ts`의 `featureSource`). 펴는 일은
+   * 학습 워커가 하고(`ml/pixel-features.ts`), 여기서는 참조만 옮긴다.
+   */
+  readonly photos?: readonly Uint8Array[]
+  /** `provided` 분할의 테스트 사진. `testDataset`의 행과 자리가 같다. */
+  readonly testPhotos?: readonly Uint8Array[]
 }
 
 export interface TrainingSourceInput {
@@ -220,6 +229,7 @@ export const TRAINING_SOURCES: Readonly<
     }
 
     const source = imageTrainingSource(filled, known, backbone, taskType)
+    const test = scored ? imageTestDataset(filled, known, backbone, taskType) : null
     return {
       project: filled,
       // 뽑은 것이 없으면 얹을 것도 없다 — 그때는 이 칸이 아예 없다.
@@ -227,10 +237,13 @@ export const TRAINING_SOURCES: Readonly<
       dataset: source.dataset,
       // **훈련 표와 같은 열 이름을 쓴다** (ml/images.ts). `provided`가 아니면 `null`이고
       // 그때는 splitRows가 아예 보지 않는다 (open-decisions.md "테스트용 zip").
-      testDataset: scored ? imageTestDataset(filled, known, backbone, taskType) : null,
+      testDataset: test?.dataset ?? null,
       settings: source.settings,
       snapshot: source.snapshot,
       rowKeys: source.hashes,
+      // **화소를 받는 알고리즘이 쓴다.** 아무도 안 고르면 아무도 안 읽는다.
+      photos: source.photos,
+      ...(test ? { testPhotos: test.photos } : {}),
     }
   },
 }

@@ -277,12 +277,14 @@
     "k_means": "K-means",
     "neural_network": "Neural network",
     "gradient_boosting": "Gradient boosting",
-    "dbscan": "DBSCAN (density-based clustering)"
+    "dbscan": "DBSCAN (density-based clustering)",
+    "cnn": "Convolutional neural network (CNN)"
   },
   "runtimes": {
     "mljs": "ml.js · this computer",
     "pyodide-sklearn": "scikit-learn · this computer",
-    "server-sklearn": "scikit-learn · self-hosted server"
+    "server-sklearn": "scikit-learn · self-hosted server",
+    "tfjs": "TensorFlow.js · this computer"
   },
   "hyperparams": {
     "maxDepth": "Maximum tree depth (maxDepth)",
@@ -306,7 +308,12 @@
     "eps": "Radius (eps)",
     "minSamples": "Minimum neighbors (minSamples)",
     "maxEpochs": "Epochs (maxEpochs)",
-    "batchSize": "Batch size (batchSize)"
+    "batchSize": "Batch size (batchSize)",
+    "convBlocks": "Convolution blocks (convBlocks)",
+    "filters": "Filters (filters)",
+    "kernelSize": "Kernel size (kernelSize)",
+    "denseUnits": "Dense layer neurons (denseUnits)",
+    "epochs": "Epochs (epochs)"
   },
   "hyperparamHelp": {
     "maxDepth": "How deep the tree is allowed to grow. A deeper tree fits the training data better, but it can memorise it and do worse on new data.",
@@ -330,7 +337,12 @@
     "eps": "The radius within which points count as neighbours. A larger radius merges clusters; a smaller one leaves more points as noise.",
     "minSamples": "How many neighbours a point needs inside the radius to be a core point. A larger value leaves more points as noise.",
     "maxEpochs": "How many times the network goes through the whole training set. One pass is one epoch; more passes learn more but take proportionally longer and can memorise. Training stops early on its own once it stops improving.",
-    "batchSize": "How many rows are bundled together before the values are adjusted once. Small bundles adjust often and wobble; large ones take steadier steps but adjust less often. A bundle larger than your data is simply all of it."
+    "batchSize": "How many rows are bundled together before the values are adjusted once. Small bundles adjust often and wobble; large ones take steadier steps but adjust less often. A bundle larger than your data is simply all of it.",
+    "convBlocks": "How many times convolution and pooling repeat as a pair. Each pass halves the picture's width and height while widening what each filter can see. Early layers find edges and lines; later ones find the shapes those make. Fewer blocks make a larger model that may not fit in the project file.",
+    "filters": "How many patterns the first convolution layer looks for. One filter finds one pattern. The count doubles with every block that follows. More filters see finer detail and take proportionally longer.",
+    "kernelSize": "The side length of the square a filter looks at in one go. A value of 3 means it sees a 3×3 patch at a time. Stacking small filters is generally better than one large filter.",
+    "denseUnits": "Neurons in the layer that weighs up what the convolution layers found. The convolutions find what is visible; this layer decides which category that adds up to.",
+    "epochs": "How many times training goes through the whole set of photos. One pass is one epoch. Unlike the neural network, this always runs every pass you ask for, so the number is the time it takes."
   },
   "missingStrategy": {
     "none": "Leave blanks as they are",

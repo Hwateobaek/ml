@@ -308,10 +308,27 @@ export function modelAxes(input: ModelAxesInput): ModelAxes {
         ...(option.maxRows === undefined ? {} : { maxRows: option.maxRows }),
       }
 
-    // **지금 걸린 실행 방법에서 도는가.** 이것이 축이 서로를 좁힌다는 말의 실체다 -
-    // 순수 JS를 고르면 서포트 벡터 머신이 여기서 꺼진다.
+    /**
+     * **지금 걸린 실행 방법에서 도는가.** 이것이 축이 서로를 좁힌다는 말의 실체다 —
+     * 서버가 꺼져 있으면 서버 전용 모델이 여기서 꺼진다.
+     *
+     * **단, "그 엔진에 구현이 없다"는 여기서 끄지 않는다** (2026-10-20). 그 사유로 끄면
+     * **실행 방법 집합이 겹치지 않는 모델을 영영 못 고른다** — 합성곱이 그 첫 사례다.
+     * 모델 칸은 걸린 실행 방법이 ml.js라 꺼지고, 실행 방법 칸은 걸린 모델이 TF.js에서
+     * 안 돌아 꺼진다. **두 축이 서로를 잠가** 학생이 열 길이 화면에 없다.
+     *
+     * 그때 할 일은 **끄는 것이 아니라 옮기는 것**이다. 학습 쪽은 이미 그렇게 한다
+     * (`ml/experiment.ts`의 `chooseRuntime` — 자동으로 넘어가고 넘어간 쪽을 말한다).
+     * 고르는 자리도 같은 규칙을 쓴다 (`views/train/ModelAxes.vue`의 `runtime`).
+     *
+     * **다른 사유는 그대로 끈다.** 서버가 없거나(`SERVER_UNAVAILABLE`) 데이터가
+     * 상한을 넘은 것은 **옮겨도 안 되는 일**이라, 옮기면 되는 것처럼 보이는 것이
+     * 거짓말이 된다.
+     */
     const here = option.runtimes.find((one) => one.runtime.id === input.runtime)
-    if (here && !here.enabled)
+    const movable =
+      here?.reason === 'ALGORITHM_NOT_AVAILABLE_HERE' && option.runtimes.some((one) => one.enabled)
+    if (here && !here.enabled && !movable)
       return {
         id,
         enabled: false,

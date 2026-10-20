@@ -19,6 +19,7 @@ import {
   TRAINING_ELAPSED_VISIBLE_AFTER_MS,
 } from '../src/limits'
 import { ALGORITHMS } from '../src/ml/algorithms'
+import { BROWSER_RUNTIME_IDS } from '../src/ml/backend'
 import { summarizeColumns } from '../src/data/columns'
 import {
   baselineMs,
@@ -164,8 +165,18 @@ group('화면이 적을 것', () => {
 group('등록부', () => {
   it('모든 알고리즘이 기준표를 든다 - 새 알고리즘이 빈칸으로 들어오지 않는다', () => {
     for (const algorithm of ALGORITHMS) {
-      expect(algorithm.baseline.tabular.ms.length, algorithm.id).toBeGreaterThan(1)
-      expect(['linear', 'flat'], algorithm.id).toContain(algorithm.baseline.tabular.columns)
+      /**
+       * **표를 여는 알고리즘만 표 기준표를 든다** (2026-10-20). 표에서 안 도는 첫
+       * 알고리즘(`cnn` — 합성곱은 열의 순서에 뜻이 있다고 전제한다)이 들어오면서,
+       * **닫힌 칸에 기준표를 내놓으라고 조르는 검사**가 됐다. 닫힌 칸의 정직한 값은
+       * `UNMEASURED_BASELINE`이고, 그것이 비어 있는 표다.
+       */
+      if (algorithm.dataTypes.tabular) {
+        expect(algorithm.baseline.tabular.ms.length, algorithm.id).toBeGreaterThan(1)
+        expect(['linear', 'flat'], algorithm.id).toContain(algorithm.baseline.tabular.columns)
+      } else {
+        expect(algorithm.baseline.tabular.ms, algorithm.id).toHaveLength(0)
+      }
       /**
        * **이미지 칸은 비었거나 제대로 된 표다.** 안 잰 칸이 조용히 숫자를 갖지 않는다는
        * 것이 원래 규칙이었고, 2026-09-03에 첫 표가 채워지면서 **"비어 있다"에서 "점 하나
@@ -203,7 +214,13 @@ group('등록부', () => {
   it('사진을 여는 알고리즘마다 사진 상한이 있다', () => {
     for (const algorithm of ALGORITHMS) {
       if (!algorithm.dataTypes.image) continue
-      expect(algorithm.maxRows.image.mljs, algorithm.id).not.toBeNull()
+      // **돌릴 수 있는 엔진 중 하나라도 재어져 있어야 한다** (2026-10-20). `mljs`를
+      // 이름으로 물으면 그 엔진에 구현이 없는 알고리즘(`cnn`)에게 **있어서는 안 되는
+      // 상수**를 조른다 — `algorithms.spec.ts`의 같은 자리와 한 짝이다.
+      const measured = BROWSER_RUNTIME_IDS.filter(
+        (runtimeId) => algorithm.runtimes[runtimeId] && algorithm.maxRows.image[runtimeId] !== null,
+      )
+      expect(measured, algorithm.id).not.toHaveLength(0)
     }
   })
 })
