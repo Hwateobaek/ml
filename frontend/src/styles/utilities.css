@@ -451,3 +451,14 @@
 @utility doc-gutter-grid {
   grid-template-columns: 3rem 1fr;
 }
+
+/*
+ * 화소를 뭉개지 않고 늘린다.
+ *
+ * **합성곱의 필터와 특성맵이 쓴다** (`CnnFilterPanel.vue`). 3×3 커널을 48px로 키우면
+ * 브라우저가 기본으로 부드럽게 섞는데, 그러면 **학생이 보려는 것이 바로 그 화소**인
+ * 자리에서 화소가 사라진다.
+ */
+@utility pixelated {
+  image-rendering: pixelated;
+}

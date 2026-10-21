@@ -336,6 +336,90 @@ function labelOf(model: ParsedCnn, scores: Float64Array): Prediction {
   return model.classes[best]!
 }
 
+/** 블록 하나가 내놓은 그림들. **채널 하나가 그림 한 장이다.** */
+export interface CnnFeatureMaps {
+  /** 몇 번째 블록인가. 1부터 센다 — 학생이 세는 방식이다. */
+  readonly block: number
+  /** 한 변. 풀링을 지날 때마다 반으로 준다. */
+  readonly side: number
+  /** 채널(필터) 수. */
+  readonly channels: number
+  /** `[높이][너비][채널]` 순서. **펴는 순서와 같다.** */
+  readonly values: Float32Array
+}
+
+/**
+ * 블록마다의 **특성맵** — *"합성곱이 무엇을 보는가"*를 그림으로 말하는 자리
+ * (open-decisions.md "필터와 특성맵을 보여준다").
+ *
+ * **`forward`와 같은 계산을 지난다.** 복사본을 만들지 않는 이유가 그것이다 — 두 벌이면
+ * 한쪽만 고쳤을 때 **화면이 모델이 보지 않은 그림을 보여준다.**
+ *
+ * **완전연결 층은 안 지난다.** 거기부터는 그림이 아니라 숫자 줄이고, 그려 봐야 학생이
+ * 읽을 것이 없다.
+ */
+export function cnnFeatureMaps(model: ParsedCnn, row: readonly number[]): CnnFeatureMaps[] {
+  const expected = model.inputSize * model.inputSize * 3
+  if (row.length !== expected) {
+    throw new ClientError('MODEL_FILE_INVALID', { field: 'inputSize' })
+  }
+
+  const maps: CnnFeatureMaps[] = []
+  let current: Float32Array = Float32Array.from(row)
+  let side = model.inputSize
+  let channels = 3
+  for (const [index, block] of model.blocks.entries()) {
+    current = convolve(
+      current,
+      side,
+      channels,
+      block.kernel,
+      block.bias,
+      block.kernelSize,
+      block.filters,
+    )
+    channels = block.filters
+    if (block.pooled) {
+      current = pool(current, side, channels)
+      side = Math.floor(side / POOL_SIZE)
+    }
+    maps.push({ block: index + 1, side, channels, values: current })
+  }
+  return maps
+}
+
+/**
+ * 첫 합성곱층의 **필터들** — 학생이 눈으로 볼 수 있는 유일한 층이다.
+ *
+ * **첫 층만 그린다.** 두 번째 층부터는 들어오는 칸이 색이 아니라 **앞 층의 필터**라,
+ * 3채널 그림으로 그릴 수가 없다 — 그려도 색은 아무 뜻이 없다.
+ *
+ * 돌려주는 것은 필터마다 `[높이][너비][RGB]`로 편 값이다. **범위는 안 맞춘다** —
+ * 가중치는 음수도 되고, 어떻게 보일지는 그리는 쪽이 정한다 (§8.3).
+ */
+export function cnnFirstFilters(model: ParsedCnn): {
+  readonly size: number
+  readonly filters: readonly Float32Array[]
+} {
+  const first = model.blocks[0]
+  if (!first) return { size: 0, filters: [] }
+  const { kernelSize, filters: count, kernel } = first
+  const out: Float32Array[] = []
+  for (let f = 0; f < count; f += 1) {
+    const tile = new Float32Array(kernelSize * kernelSize * 3)
+    for (let y = 0; y < kernelSize; y += 1) {
+      for (let x = 0; x < kernelSize; x += 1) {
+        for (let c = 0; c < 3; c += 1) {
+          // 담긴 순서가 `[ky][kx][들어오는 칸][나가는 칸]`이다.
+          tile[(y * kernelSize + x) * 3 + c] = kernel[((y * kernelSize + x) * 3 + c) * count + f]!
+        }
+      }
+    }
+    out.push(tile)
+  }
+  return { size: kernelSize, filters: out }
+}
+
 export function loadCnnModel(file: unknown): Predict {
   const model = parseCnn(file)
   return (features) => features.map((row) => labelOf(model, forward(model, row)))

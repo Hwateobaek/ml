@@ -22,6 +22,7 @@ import { defineAsyncComponent, type Component } from 'vue'
 
 import type { DataType, Experiment, Run, TaskType } from '../project/schema'
 import { supports, type Axis } from './axes'
+import { showsFilters } from './cnn-view'
 import { showsLossCurve } from './loss-curve'
 import { showsParameters } from './parameters'
 import type { Dataset, Preprocessor } from './preprocess'
@@ -147,6 +148,24 @@ const PANELS: readonly MetricPanel[] = [
     // `run` 하나로는 못 보고, 그 사실은 패널이 열어 보고 안다 (§9.5).
     hasData: (run) => showsLossCurve(run.model?.format),
     panel: defineAsyncComponent(() => import('@/views/results/panels/LossCurvePanel.vue')),
+  },
+  {
+    /**
+     * 합성곱이 **무엇을 보는가** (open-decisions.md "필터와 특성맵을 보여준다").
+     *
+     * **표에서는 성립하지 않는다.** 합성곱은 이웃한 화소가 뜻을 나눈다는 전제 위에 서고,
+     * 표의 열은 순서에 뜻이 없다 — 등록부가 이미 그 알고리즘을 표에서 닫아 두었고
+     * (`ml/algorithms.ts`), 이 줄은 **같은 사실을 패널 쪽에서 적는다.**
+     *
+     * **군집에는 없다.** 그 조합의 모델이 아예 없다.
+     */
+    id: 'cnn-filters',
+    dataTypes: { tabular: false, image: true },
+    taskTypes: { classification: true, regression: false, clustering: false },
+    // **형식으로 판정한다** — 손실 곡선과 같은 규칙이다. 필터는 모델 파일 안이라
+    // `run` 하나로는 못 보고, 그 사실은 패널이 열어 보고 안다 (§9.5).
+    hasData: (run) => showsFilters(run.model?.format),
+    panel: defineAsyncComponent(() => import('@/views/results/panels/CnnFilterPanel.vue')),
   },
   {
     id: 'cluster-result',

@@ -930,6 +930,17 @@
   },
   "results": {
     "actual": "Actual",
+    "cnn": {
+      "filtersTitle": "What the first layer looks for",
+      "filtersLead": "The patterns the convolution layer tries to find in a photo. Each filter takes one pattern. Training decided these on its own — nobody specified them.",
+      "filterLabel": "Filter {index}",
+      "shown": "Showing {shown} of {total}.",
+      "mapsTitle": "How a photo changes layer by layer",
+      "mapsLead": "One of the training photos as it passes through each layer. Bright areas are where that filter responded. Each layer halves the width and height while widening what a filter can see.",
+      "original": "Original photo",
+      "blockLabel": "After convolution layer {block} ({side}×{side})",
+      "mapLabel": "Layer {block}, filter {index}"
+    },
     "cellActual": "Actual",
     "cellCorrect": "Predictions in this cell match the actual value.",
     "cellCount": "Samples",

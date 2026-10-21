@@ -930,6 +930,17 @@
   },
   "results": {
     "actual": "실제 값",
+    "cnn": {
+      "filtersTitle": "첫 층이 찾는 무늬",
+      "filtersLead": "합성곱층이 사진에서 찾아내려는 무늬입니다. 필터 하나가 무늬 하나를 맡습니다. 학습하면서 스스로 정해진 것이라 사람이 지정한 것이 아닙니다.",
+      "filterLabel": "{index}번 필터",
+      "shown": "{total}개 중 {shown}개를 보여줍니다.",
+      "mapsTitle": "사진이 층을 지나며 달라지는 모습",
+      "mapsLead": "학습에 쓴 사진 한 장이 층을 지날 때마다 어떻게 보이는지입니다. 밝은 곳이 그 필터가 반응한 자리입니다. 층을 지날수록 가로세로가 절반으로 줄고, 대신 보는 범위가 넓어집니다.",
+      "original": "원래 사진",
+      "blockLabel": "{block}번째 합성곱층을 지난 뒤 ({side}×{side})",
+      "mapLabel": "{block}번째 층의 {index}번 필터"
+    },
     "cellActual": "실제 값",
     "cellCorrect": "실제 값과 같게 예측한 칸입니다.",
     "cellCount": "데이터 수",

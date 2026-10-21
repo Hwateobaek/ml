@@ -203,6 +203,21 @@ export const IMAGE_GRID_PAGE_SIZE = 30
 export const CLUSTER_REPRESENTATIVE_COUNT = 9
 
 /**
+ * 결과 화면이 그리는 **필터와 특성맵의 장수**
+ * (open-decisions.md "필터와 특성맵을 보여준다").
+ *
+ * **열여섯은 기본 손잡이의 필터 수다** (`ml/engines/tfjs-params.ts`의 `filters`).
+ * 손대지 않은 학생에게는 **전부**가 보이고, 늘린 학생에게는 앞의 열여섯이 보인다 —
+ * 128장을 그리면 한 쪽이 통째로 타일로 덮인다.
+ *
+ * **블록마다 이만큼이다.** 블록 셋이면 마흔여덟 장인데, 특성맵 한 장이 작아서
+ * (8×8~32×32) 캔버스 비용은 그림 수가 아니라 화소 수가 정한다.
+ *
+ * **분류: 상한이 아니다.**
+ */
+export const CNN_FEATURE_MAP_COUNT = 16
+
+/**
  * 예측 화면이 한 쪽에 세우는 사진 수.
  *
  * **화면을 위한 것이 아니라 계산을 위한 것이다** (`PREDICT_PAGE_SIZE`와 같은 사정).

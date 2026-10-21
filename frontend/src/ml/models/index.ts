@@ -64,8 +64,15 @@ export {
   parseNeuralRegression,
 } from './neural'
 export type { NeuralModel, NeuralRegressionModel, ParsedLayers, ParsedNeural } from './neural'
-export { CNN_FORMAT, loadCnnModel, loadCnnProba, parseCnn } from './cnn'
-export type { CnnBlock, CnnDense, CnnModel, ParsedCnn } from './cnn'
+export {
+  CNN_FORMAT,
+  cnnFeatureMaps,
+  cnnFirstFilters,
+  loadCnnModel,
+  loadCnnProba,
+  parseCnn,
+} from './cnn'
+export type { CnnBlock, CnnDense, CnnFeatureMaps, CnnModel, ParsedCnn } from './cnn'
 export {
   REFERENCE_FORMAT,
   REFERENCE_REGRESSION_FORMAT,
