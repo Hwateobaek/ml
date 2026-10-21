@@ -309,6 +309,7 @@ describe('훈련 행이 필요한 형식', () => {
       format: 'test-reference',
       includesPreprocessing: false,
       needsTrainingRows: true,
+      featureSource: 'embedding',
       load: () => () => ['nope'],
     }
 

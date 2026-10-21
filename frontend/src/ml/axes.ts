@@ -35,3 +35,24 @@ export type Axis<Value extends string> = Readonly<Record<Value, boolean>>
 export function supports<Value extends string>(axis: Axis<Value>, value: Value): boolean {
   return axis[value]
 }
+
+/**
+ * **무엇을 특성으로 받는가**
+ * (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+ *
+ * - `embedding` — 백본이 만든 숫자 표. **지금까지 전부가 이것이었다** (open-decisions.md
+ *   "이미지 학습은 표 문제로 바꿔서 푼다"). 표 데이터도 같은 칸을 쓴다 — 거기서는
+ *   정본 CSV가 그 표다.
+ * - `pixels` — 사진의 화소를 편 줄. **합성곱이 화소를 봐야 해서 생긴 칸이다.**
+ *
+ * **두 등록부가 같은 낱말을 쓴다.** 알고리즘이 무엇을 먹는지(`ml/algorithms.ts`)와
+ * 저장된 모델이 무엇을 먹는지(`ml/models/index.ts`)는 **같은 질문**이고, 낱말이 갈리면
+ * 학습 때와 예측 때가 서로 다른 것을 먹일 수 있다.
+ *
+ * **그래서 이 파일에 산다.** 둘 중 한쪽에 두면 다른 쪽이 그쪽을 임포트해야 하는데,
+ * 모델 계층은 **아무것도 임포트하지 않는 것**이 규칙이다 (`ml/models/types.ts`).
+ *
+ * **불리언 축(`Axis`)이 아니라 값 하나다.** 하나가 두 출처를 동시에 받는 일은 없고,
+ * `Axis`로 두면 "둘 다 참"이라는 표현할 수 없는 상태가 생긴다.
+ */
+export type FeatureSource = 'embedding' | 'pixels'

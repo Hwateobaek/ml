@@ -40,6 +40,7 @@ import {
   loadGradientBoostingRegressionModel,
 } from './gradient-boosting'
 import { DBSCAN_FORMAT, loadDbscanModel } from './dbscan'
+import { CNN_FORMAT, loadCnnModel, loadCnnProba } from './cnn'
 import type { LoadContext, ModelInterpreter, Predict, ProbaModel } from './types'
 
 export { KMEANS_FORMAT, kmeansPredict, loadKMeansModel, parseKMeansModel } from './kmeans'
@@ -63,6 +64,8 @@ export {
   parseNeuralRegression,
 } from './neural'
 export type { NeuralModel, NeuralRegressionModel, ParsedLayers, ParsedNeural } from './neural'
+export { CNN_FORMAT, loadCnnModel, loadCnnProba, parseCnn } from './cnn'
+export type { CnnBlock, CnnDense, CnnModel, ParsedCnn } from './cnn'
 export {
   REFERENCE_FORMAT,
   REFERENCE_REGRESSION_FORMAT,
@@ -99,12 +102,14 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: TREE_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadTreeModel,
   },
   {
     format: LINEAR_V2_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadLinearV2Model,
     // **확률을 내는 형식은 이 계열뿐이다** (mlpx-spec.md 5.4). 결정 트리와 나이브
     // 베이즈도 sklearn에서는 predict_proba를 가지므로 여기 항목이 늘어날 자리다.
@@ -114,6 +119,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: NAIVE_BAYES_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadNaiveBayesModel,
   },
   {
@@ -124,8 +130,27 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: NEURAL_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadNeuralModel,
     loadProba: loadNeuralProba,
+  },
+  {
+    /**
+     * **합성곱 신경망** (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
+     *
+     * **`includesPreprocessing`이 참인 첫 형식이다.** 화소를 255로 나누는 일이 모델
+     * 안에 있고(교과서의 `rescale = 1./255`), 실험의 전처리기는 **임베딩의 좌표계**라
+     * 이 모델과 아무 상관이 없다 — 그것을 요구하면 **있지도 않은 짝을 기다린다.**
+     *
+     * **읽는 쪽은 TF.js를 모른다** (`models/cnn.ts`). 순전파를 직접 계산하므로
+     * `load`가 동기로 남고, 그래서 예측 화면이 지금 모양 그대로다.
+     */
+    format: CNN_FORMAT,
+    includesPreprocessing: true,
+    needsTrainingRows: false,
+    featureSource: 'pixels',
+    load: loadCnnModel,
+    loadProba: loadCnnProba,
   },
   {
     /**
@@ -135,12 +160,14 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: NEURAL_REGRESSION_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadNeuralRegressionModel,
   },
   {
     format: LINEAR_REGRESSION_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadLinearRegressionModel,
   },
   {
@@ -148,6 +175,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     includesPreprocessing: false,
     // **선형 SVM은 가중치뿐이라 자체 완결이다** (mlpx-spec.md 5.8). 참조형과 갈리는 자리다.
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadSvmModel,
   },
   {
@@ -155,6 +183,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     includesPreprocessing: false,
     // **첫 true다.** 모델이 사실상 훈련 데이터라 행 번호만 담는다 (mlpx-spec.md 5.1).
     needsTrainingRows: true,
+    featureSource: 'embedding',
     load: loadReferenceModel,
   },
   {
@@ -163,6 +192,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: KMEANS_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadKMeansModel,
   },
   {
@@ -170,6 +200,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: TREE_REGRESSION_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadRegressionTreeModel,
   },
   {
@@ -177,6 +208,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: REFERENCE_REGRESSION_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: true,
+    featureSource: 'embedding',
     load: loadReferenceRegressionModel,
   },
   {
@@ -184,6 +216,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: GRADIENT_BOOSTING_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadGradientBoostingModel,
     loadProba: loadGradientBoostingProba,
   },
@@ -191,6 +224,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: GRADIENT_BOOSTING_REGRESSION_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadGradientBoostingRegressionModel,
   },
   {
@@ -198,6 +232,7 @@ const INTERPRETERS: readonly ModelInterpreter[] = [
     format: DBSCAN_FORMAT,
     includesPreprocessing: false,
     needsTrainingRows: false,
+    featureSource: 'embedding',
     load: loadDbscanModel,
   },
 ]

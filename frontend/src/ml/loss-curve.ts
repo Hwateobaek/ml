@@ -14,8 +14,10 @@
  */
 
 import {
+  CNN_FORMAT,
   NEURAL_FORMAT,
   NEURAL_REGRESSION_FORMAT,
+  parseCnn,
   parseNeural,
   parseNeuralRegression,
 } from './models'
@@ -32,7 +34,7 @@ export interface LossPoint {
  * 답한다.
  */
 export function showsLossCurve(format: string | undefined): boolean {
-  return format === NEURAL_FORMAT || format === NEURAL_REGRESSION_FORMAT
+  return format === NEURAL_FORMAT || format === NEURAL_REGRESSION_FORMAT || format === CNN_FORMAT
 }
 
 /**
@@ -58,7 +60,9 @@ export function lossCurveOf(
     const curve =
       format === NEURAL_FORMAT
         ? parseNeural(payload).lossCurve
-        : parseNeuralRegression(payload).lossCurve
+        : format === CNN_FORMAT
+          ? parseCnn(payload).lossCurve
+          : parseNeuralRegression(payload).lossCurve
     if (curve.length < 2) return null
     return curve.map((loss, index) => ({ epoch: index + 1, loss }))
   } catch {

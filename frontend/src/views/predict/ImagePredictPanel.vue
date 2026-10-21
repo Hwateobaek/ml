@@ -33,7 +33,8 @@ import { backboneFor } from '@/ml/backbones'
 import { embedImages } from '@/ml/embed/client'
 import { spawnEmbedWorker } from '@/ml/embed/spawn'
 import { imagePredictTable, imageTrainingRows, pendingEmbeddings } from '@/ml/images'
-import { loadModel, loadModelProba, type LoadContext } from '@/ml/models'
+import { interpreterFor, loadModel, loadModelProba, type LoadContext } from '@/ml/models'
+import { canvasPixelDecoder } from '@/ml/pixel-draw'
 import {
   algorithmFilterOptions,
   applyPredictFilter,
@@ -435,6 +436,29 @@ async function run(): Promise<void> {
     // **벡터가 없는 사진은 답을 안 낸다** — `table.missing`이 그것을 들고 있다.
     const table = imagePredictTable(photos.value, known, spec)
 
+    /**
+     * 화소로 편 사진들. **화소를 받는 모델이 보일 때만 편다**
+     * (`ml/models/index.ts`의 `featureSource`) — 임베딩만 쓰는 학생이 디코드 비용을
+     * 치를 이유가 없다.
+     *
+     * **학습 때와 같은 함수로 편다** (`ml/pixel-draw.ts`). 둘이 갈리면 학습한 사진과
+     * 예측하는 사진이 다른 숫자가 되고, **그 차이는 성적에서만 조용히 드러난다.**
+     */
+    const pixelRows = new Map<string, readonly number[]>()
+    const wantsPixels = visibleUsable.value.some(
+      (entry) =>
+        entry.run.model && interpreterFor(entry.run.model.format)?.featureSource === 'pixels',
+    )
+    if (wantsPixels) {
+      const targets = photos.value.filter((photo) => wanted.has(photo.hash))
+      const rows = await canvasPixelDecoder(targets.map((photo) => photo.bytes))
+      for (const [at, photo] of targets.entries()) {
+        const row = rows[at]
+        if (row) pixelRows.set(photo.hash, row)
+      }
+      if (!alive()) return
+    }
+
     // **이미 낸 답은 그대로 둔다.** 쪽을 되돌아갔을 때 다시 계산하지 않는다.
     const next = new Map(answers.value)
     const contexts = new Map<string, LoadContext>()
@@ -450,20 +474,33 @@ async function run(): Promise<void> {
         const preprocessor = preprocessors.value.get(entry.experiment.id)
         const path = entry.run.model?.path
         const bytes = path === undefined ? undefined : current.models.get(path)
-        if (!preprocessor || !bytes) continue
+        /**
+         * **이 모델이 무엇을 먹는가는 등록부가 답한다** (`ml/models/index.ts`의
+         * `featureSource`). 형식 이름을 보고 가르면 둘째 화소 모델이 들어온 날
+         * 이 자리를 아무도 다시 안 본다.
+         */
+        const interpreter = entry.run.model ? interpreterFor(entry.run.model.format) : undefined
+        const onPixels = interpreter?.featureSource === 'pixels'
+        // **전처리기는 그것을 쓰는 모델에만 필요하다.** 화소를 받는 모델은 스케일을
+        // 자기 안에 들고 있어(`includesPreprocessing`) 임베딩의 좌표계와 상관이 없다.
+        if (!bytes || (!preprocessor && !onPixels)) continue
 
         try {
           const payload = JSON.parse(new TextDecoder().decode(bytes)) as unknown
           let context = contexts.get(entry.experiment.id)
           if (context === undefined) {
-            const rows = imageTrainingRows(
-              current,
-              entry.experiment,
-              preprocessor,
-              spec,
-              known,
-              entry.experiment.settings.taskType,
-            )
+            // **전처리기가 없으면 되세울 것도 없다.** 훈련 행을 요구하는 형식(참조형)은
+            // 전부 전처리기도 함께 쓰므로, 이 자리가 비는 것은 **아무도 안 요구할 때**뿐이다.
+            const rows = preprocessor
+              ? imageTrainingRows(
+                  current,
+                  entry.experiment,
+                  preprocessor,
+                  spec,
+                  known,
+                  entry.experiment.settings.taskType,
+                )
+              : null
             context = rows ? { trainingRows: rows } : {}
             contexts.set(entry.experiment.id, context)
           }
@@ -472,7 +509,12 @@ async function run(): Promise<void> {
           // 모델에 들어가고, 이 파일 자신의 주석이 "0으로 메우면 모든 사진이 같은
           // 답을 받는다"고 금지한 바로 그 모양이 된다 (V11 R4 C-6). 위의
           // `table.missing` 가드 덕에 지금은 안 닿지만, 닿으면 조용히 틀린다.
-          const vector = transform(preprocessor, table, [index], 'onehot')[0]
+          // **화소를 받는 모델에는 화소를 준다.** 임베딩을 넣으면 길이가 안 맞아
+          // 던지지만(`models/cnn.ts`), 그건 마지막 그물이지 설계가 아니다.
+          const vector =
+            onPixels || !preprocessor
+              ? pixelRows.get(photo.hash)
+              : transform(preprocessor, table, [index], 'onehot')[0]
           if (vector === undefined || vector.length === 0) continue
           const value = loadModel(payload, context)([vector])[0]
           // **확률을 내는 모델만 확률이 있다** (mlpx-spec.md §5.4). 라벨은 위에서 이미

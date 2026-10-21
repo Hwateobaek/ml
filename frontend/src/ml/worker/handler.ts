@@ -12,7 +12,7 @@ import { runExperiment } from '../experiment'
 import { forestPoolFactory } from './forest-pool'
 import { knnPoolFactory } from './knn-pool'
 import { neuralPoolFactory } from './neural-pool'
-import { canvasPixelDecoder } from './pixel-draw'
+import { canvasPixelDecoder } from '../pixel-draw'
 import type { TrainRequest, WorkerMessage, WorkerRequest } from './protocol'
 
 /**

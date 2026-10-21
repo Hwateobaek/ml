@@ -9,6 +9,7 @@
  * models -> engines -> ml-cart 로 이어지고, 그 순간 위 문장은 주석일 뿐이게 된다.
  */
 
+import type { FeatureSource } from '../axes'
 import type { Prediction } from '../metrics'
 
 /** 학습됐거나 파일에서 읽은 모델. 예측만 할 수 있으면 된다. */
@@ -99,6 +100,18 @@ export interface ModelInterpreter {
    * 이 불리언 하나로 판정한다.
    */
   readonly needsTrainingRows: boolean
+  /**
+   * 이 형식이 **무엇을 먹는가** (`ml/axes.ts`의 `FeatureSource`).
+   *
+   * **학습 등록부의 같은 칸과 짝이다** (`ml/algorithms.ts`). 거기서 화소를 먹인 모델은
+   * 여기서도 화소를 받아야 하고, **갈리면 예측 화면이 1,280칸짜리 임베딩을 사진으로
+   * 알고 넣으면서 아무 오류도 안 낸다** — 길이가 안 맞으면 던지도록 해 두었지만
+   * (`models/cnn.ts`의 `forward`), 그건 마지막 그물이지 설계가 아니다.
+   *
+   * **화면이 형식 이름을 보고 가르지 않게 하는 칸이다** (§9.1). 예측 화면은 이 값만
+   * 보고 사진을 화소로 펼지 임베딩을 꺼낼지 정한다.
+   */
+  readonly featureSource: FeatureSource
   /** 파일 내용을 예측 함수로. 내용이 형식과 안 맞으면 던진다. */
   load(file: unknown, context: LoadContext): Predict
   /**

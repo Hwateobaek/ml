@@ -62,7 +62,7 @@ import {
   TFJS_IMAGE_CNN_ROW_LIMIT,
 } from '../limits'
 import { TASK_TYPES, type DataType, type TaskType } from '../project/schema'
-import { supports, type Axis } from './axes'
+import { supports, type Axis, type FeatureSource } from './axes'
 import { DEFAULT_BACKBONE_ID, backboneFor } from './backbones'
 import {
   runtimeOptions,
@@ -74,21 +74,9 @@ import {
   type UnavailableReason,
 } from './backend'
 
-/**
- * 이 알고리즘이 **무엇을 특성으로 받는가**
- * (open-decisions.md "합성곱을 직접 학습하는 길을 연다").
- *
- * - `embedding` — 백본이 만든 숫자 표. **지금까지 전부가 이것이었다** (open-decisions.md
- *   "이미지 학습은 표 문제로 바꿔서 푼다"). 표 데이터도 같은 칸을 쓴다 — 거기서는
- *   정본 CSV가 그 표다.
- * - `pixels` — 정본 바이트와 사진 해시. **합성곱이 화소를 봐야 해서 생긴 칸이다.**
- *   표를 못 쓴다 — `Dataset`의 칸이 문자열이라 64×64×3이면 사진 한 장이 문자열
- *   12,288개이고, 300장이면 370만 개다.
- *
- * **불리언 축(`Axis`)이 아니라 값 하나다.** 알고리즘 하나가 두 출처를 동시에 받는 일은
- * 없고, `Axis`로 두면 "둘 다 참"이라는 표현할 수 없는 상태가 생긴다.
- */
-export type FeatureSource = 'embedding' | 'pixels'
+// **낱말은 `ml/axes.ts`가 갖는다.** 저장된 모델의 등록부도 같은 것을 쓴다
+// (`ml/models/index.ts`) — 학습 때와 예측 때가 같은 것을 먹어야 한다.
+export type { FeatureSource } from './axes'
 
 export interface Algorithm extends AlgorithmSpec {
   readonly dataTypes: Axis<DataType>

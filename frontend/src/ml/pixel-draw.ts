@@ -1,7 +1,7 @@
 /**
  * 정본을 캔버스에 **줄여 그려** 화소를 꺼낸다 (`ml/pixel-features.ts`의 `DrawToRgba`).
  *
- * **워커 전역이 필요한 쪽이 여기 전부다.** 산수는 저쪽에 있고 여기 있는 것은 그리는
+ * **캔버스가 필요한 쪽이 여기 전부다.** 산수는 저쪽에 있고 여기 있는 것은 그리는
  * 일뿐이라, 노드에서 이 파일을 임포트해도 **부르지만 않으면** 아무 일도 안 난다 —
  * 화소를 받는 알고리즘을 아무도 안 고르면 한 번도 안 불린다.
  *
@@ -10,7 +10,7 @@
  * 없다: 224 정본을 64로 줄이는 것은 화소를 만드는 일이 아니라 버리는 일이다.
  */
 
-import { pixelDecoder, type PixelDecoder } from '../pixel-features'
+import { pixelDecoder, type PixelDecoder } from './pixel-features'
 
 /**
  * 흰 바탕에 줄여 그린다.
@@ -38,5 +38,11 @@ async function drawToRgba(bytes: Uint8Array, size: number): Promise<Uint8Clamped
   }
 }
 
-/** 학습 워커가 실험에 넘기는 디코더. */
+/**
+ * 정본을 화소로 펴는 디코더. **학습 워커와 예측 화면이 같은 것을 쓴다** — 둘이
+ * 갈리면 학습 때 본 사진과 예측 때 본 사진이 **다른 숫자**가 되고, 그 차이는
+ * 성적에서만 조용히 드러난다.
+ *
+ * 는 워커에도 주 스레드에도 있다 — 그래서 한 벌로 족하다.
+ */
 export const canvasPixelDecoder: PixelDecoder = pixelDecoder(drawToRgba)

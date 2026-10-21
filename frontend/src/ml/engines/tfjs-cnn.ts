@@ -23,6 +23,7 @@
 
 import { CNN_INPUT_SIZE } from '../../limits'
 import type { Prediction } from '../metrics'
+import { CNN_FORMAT, type CnnModel } from '../models/cnn'
 import type { Predict } from '../models/types'
 import { shuffled } from '../shuffle'
 import type { FitInput, FitResult } from './mljs'
@@ -163,12 +164,22 @@ export async function fit(algorithm: string, input: FitInput): Promise<FitResult
   const blocks = Math.max(1, numberOption(options, 'convBlocks'))
   const pooled = poolableBlocks(size, blocks)
   const model = layers.sequential()
+  /**
+   * 쌓은 층을 그대로 들고 있는다. **파일로 옮겨 담을 때 이 목록을 읽는다**
+   * (아래 `serialize`) — TF.js가 붙인 이름으로 되찾으면 그 이름이 판마다 달라질 수 있고,
+   * 그때 **엉뚱한 층의 가중치를 담으면서 아무 오류도 안 난다.**
+   */
+  const convShapes: { filters: number; kernelSize: number; pooled: boolean }[] = []
+  const denseShapes: { units: number; activation: 'relu' | 'softmax' }[] = []
   for (let block = 0; block < blocks; block += 1) {
+    const filters = Math.max(1, numberOption(options, 'filters')) * 2 ** block
+    const kernelSize = Math.max(1, numberOption(options, 'kernelSize'))
+    convShapes.push({ filters, kernelSize, pooled: block < pooled })
     model.add(
       layers.layers.conv2d({
         // **블록마다 두 배다.** 교과서가 보여 주는 VGG16의 모양이기도 하다(64 → 128 → 256).
-        filters: Math.max(1, numberOption(options, 'filters')) * 2 ** block,
-        kernelSize: Math.max(1, numberOption(options, 'kernelSize')),
+        filters,
+        kernelSize,
         activation: 'relu',
         // **`same`이라 합성곱이 크기를 안 깎는다.** 줄이는 일은 풀링 하나가 맡는다 —
         // 그래야 "풀링이 화면을 반으로 줄인다"는 수업 문장이 화면에서 참이 된다.
@@ -180,13 +191,16 @@ export async function fit(algorithm: string, input: FitInput): Promise<FitResult
     if (block < pooled) model.add(layers.layers.maxPooling2d({ poolSize: POOL_SIZE }))
   }
   model.add(layers.layers.flatten())
+  const denseUnits = Math.max(1, numberOption(options, 'denseUnits'))
+  denseShapes.push({ units: denseUnits, activation: DENSE_ACTIVATION })
   model.add(
     layers.layers.dense({
-      units: Math.max(1, numberOption(options, 'denseUnits')),
+      units: denseUnits,
       activation: DENSE_ACTIVATION,
       kernelInitializer: layers.initializers.glorotUniform({ seed: input.randomState }),
     }),
   )
+  denseShapes.push({ units: classes.length, activation: 'softmax' })
   model.add(
     layers.layers.dense({
       units: classes.length,
@@ -201,6 +215,7 @@ export async function fit(algorithm: string, input: FitInput): Promise<FitResult
     metrics: ['accuracy'],
   })
 
+  const lossCurve: number[] = []
   const xs = core.tensor4d(flat, [rows, size, size, 3])
   const ys = core.tensor2d(labels, [rows, classes.length])
   try {
@@ -208,6 +223,14 @@ export async function fit(algorithm: string, input: FitInput): Promise<FitResult
       epochs: Math.max(1, numberOption(options, 'epochs')),
       batchSize: Math.min(Math.max(1, numberOption(options, 'batchSize')), rows),
       shuffle: false,
+      callbacks: {
+        onEpochEnd: (_epoch, logs) => {
+          // **엔진이 실제로 지나간 손실을 그대로 담는다** (`ml/loss-curve.ts`) — 평활하지도
+          // 로그를 씌우지도 않는다.
+          const loss = logs?.['loss']
+          if (typeof loss === 'number' && Number.isFinite(loss)) lossCurve.push(loss)
+        },
+      },
     })
   } finally {
     // **들어온 텐서를 반드시 놓는다.** 사진 800장이 한 덩이에 39MB이고, 이것이
@@ -245,19 +268,90 @@ export async function fit(algorithm: string, input: FitInput): Promise<FitResult
   }
 
   /**
-   * **모델을 아직 파일에 안 담는다** (open-decisions.md "합성곱을 직접 학습하는 길을
-   * 연다"). 담을 수는 있는데 **다시 읽을 길이 없다** — 모델 계층의 해석기는
-   * `load(file): Predict`가 **동기**이고, TF.js 그래프를 세우는 일은 비동기다.
-   * 해석기 없는 모델을 넣으면 학생은 **열어서 예측할 수 없는 무게**만 얻는다
-   * (`project/attach.ts`가 그래서 떨어뜨린다).
+   * **우리 형식으로 옮겨 담는다** (`ml/models/cnn.ts`). TF.js가 뱉은 조각을 그대로
+   * 담지 않는 이유는, 그러면 **그 파일을 여는 쪽이 TF.js를 알아야 하기** 때문이다 —
+   * 모델 계층이 금지하는 바로 그것이다 (`ml/models/types.ts`).
    *
-   * 그래서 이 실행은 **지표까지만 남는다** — 파일에는 `modelOmitted:
-   * 'engineUnsupported'`가 적히고, 그 어휘가 뜻하는 바가 정확히 이 상태다
-   * (`project/schema.ts`: *"그 실행 방법에 아직 직렬화기가 없다"*).
-   *
-   * **손실 곡선도 그래서 아직 없다.** 곡선은 모델 파일 안에 사는데
-   * (`ml/loss-curve.ts`) 그 파일이 안 담기기 때문이다 — 해석기 계층이 비동기를
-   * 받는 날 **모델·곡선·예측 셋이 함께** 선다.
+   * **못 담아도 학습은 성공이다** (mlpx-spec.md 4.2). 그때는 사유만 적히고 지표는 남는다.
    */
-  return { predict }
+  let file: CnnModel | undefined
+  let omitted: string | undefined
+  try {
+    file = serialize(model, convShapes, denseShapes, classes, size, lossCurve)
+  } catch (error) {
+    omitted = error instanceof Error ? error.message : String(error)
+  }
+
+  return {
+    predict,
+    ...(file ? { model: file } : {}),
+    ...(omitted === undefined ? {} : { modelOmittedDetail: omitted }),
+  }
+}
+
+/**
+ * float32 배열을 base64로. **`.mlpx` 안이 JSON이라 글자여야 한다.**
+ *
+ * 조각으로 끊어 읽는 이유는 `String.fromCharCode`가 **인자 수 상한**에 걸리기 때문이다 —
+ * 가중치 50만 개면 바이트가 200만 개다.
+ */
+function toBase64(values: Float32Array): string {
+  const bytes = new Uint8Array(values.buffer, values.byteOffset, values.byteLength)
+  let text = ''
+  const CHUNK = 0x8000
+  for (let at = 0; at < bytes.length; at += CHUNK) {
+    text += String.fromCharCode(...bytes.subarray(at, at + CHUNK))
+  }
+  return btoa(text)
+}
+
+/**
+ * 층 하나의 `[커널, 절편]`. **TF.js가 그 순서로 준다.**
+ *
+ * **`dataSync()`가 float32인지 확인한다.** 타입은 세 가지를 다 열어 두는데, 우리가 쌓은
+ * 층의 가중치는 언제나 float32다 — 아니면 **바이트를 잘못 읽으면서 조용히 다른 숫자가
+ * 된다.**
+ */
+function weightsOf(layer: import('@tensorflow/tfjs-layers').layers.Layer): {
+  kernel: string
+  bias: string
+} {
+  const [kernel, bias] = layer.getWeights()
+  if (!kernel || !bias) throw new Error('layer has no weights')
+  const floats = (tensor: (typeof kernel)['dataSync'] extends never ? never : typeof kernel) => {
+    const values = tensor.dataSync()
+    if (!(values instanceof Float32Array)) throw new Error(`expected float32, got ${tensor.dtype}`)
+    return values
+  }
+  return { kernel: toBase64(floats(kernel)), bias: toBase64(floats(bias)) }
+}
+
+function serialize(
+  model: import('@tensorflow/tfjs-layers').Sequential,
+  convShapes: readonly { filters: number; kernelSize: number; pooled: boolean }[],
+  denseShapes: readonly { units: number; activation: 'relu' | 'softmax' }[],
+  classes: readonly string[],
+  inputSize: number,
+  lossCurve: readonly number[],
+): CnnModel {
+  /**
+   * **가중치를 든 층만 센다.** 풀링과 펴기는 배울 것이 없어 `getWeights()`가 비어 있고,
+   * 그래서 순서가 합성곱들 다음에 완전연결들이다 — 쌓은 차례 그대로다.
+   */
+  const weighted = model.layers.filter((layer) => layer.getWeights().length > 0)
+  if (weighted.length !== convShapes.length + denseShapes.length) {
+    throw new Error(`expected ${convShapes.length + denseShapes.length} weighted layers`)
+  }
+
+  return {
+    format: CNN_FORMAT,
+    classes: [...classes],
+    inputSize,
+    lossCurve: [...lossCurve],
+    blocks: convShapes.map((shape, index) => ({ ...shape, ...weightsOf(weighted[index]!) })),
+    dense: denseShapes.map((shape, index) => ({
+      ...shape,
+      ...weightsOf(weighted[convShapes.length + index]!),
+    })),
+  }
 }
