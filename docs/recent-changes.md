@@ -12,9 +12,14 @@ Codex와 Claude가 함께 사용하는 인계 문서다. 최신 항목을 맨 �
 - 범위: 현재 브라우저·사이트의 IndexedDB 프로젝트만 삭제하며 내려받은 `.mlpx` 파일은 삭제하지 않는다. 기존 개별 삭제도 유지한다.
 - 언어: 한국어와 영어 문구를 함께 추가했다.
 - 검증: `npm run ci` 전체 통과(165개 테스트 파일, 3,314개 통과·2개 제외). 백본 검사, ESLint·Prettier, 타입 검사, Python sklearn 픽스처 대조, 프로덕션 빌드를 모두 통과했다. 로컬 CI는 샌드박스의 Python 캐시 권한 문제를 피하기 위해 작업 폴더의 `.cache/uv`를 사용해 실행했다.
-- 배포: 사용자가 공개 사이트 배포와 전체 절차 수행을 승인했다. 아직 배포 완료 전이며, 최종 결과는 아래에 갱신한다.
+- 배포: 사용자 승인으로 공개 사이트 배포를 완료했다. 결과는 아래와 같다.
 - 협업: `CLAUDE.md`에서 이 문서를 안내하며 이후 작업도 변경 이유·검증·배포 결과를 계속 기록한다.
 
 ### 배포 결과
 
-진행 중. 대상은 `Hwateobaek/ml` 저장소의 `main`과 GitHub Pages의 `https://hwateobaek.github.io/ml/`다.
+- 대상: `Hwateobaek/ml` 저장소의 `main`, [공개 사이트](https://hwateobaek.github.io/ml/).
+- 배포한 기능 커밋: `1347e17a722e9ae0dce5b280d7f69e9c8c10b7f7`.
+- [GitHub Actions 배포 실행 40267502813](https://github.com/Hwateobaek/ml/actions/runs/40267502813): Build와 Deploy 모두 `success`로 완료했다.
+- 공개 주소 HTTP 200과 실제 제공되는 `assets/index-e4pvHOci.js`의 `deleteAll`, `deleteSelected`, `deleteManyDescription` 반영을 확인했다.
+- 실제 사용자 프로젝트를 삭제하는 동작은 수행하지 않았다. 취소·삭제·다른 탭 잠금 보호는 테스트용 IndexedDB로 검증했다.
+- 남은 일: 이번 요청 범위에서 없음. 이 문서의 배포 결과 기록만 후속 문서 커밋으로 올린다. 문서만 올리는 푸시는 공개 사이트를 다시 배포하지 않는다(수동 배포 구조).
