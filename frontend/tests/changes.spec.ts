@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { describeChanges, memberDiff } from '../src/ml/changes'
+import { describeChanges, experimentSettings, memberDiff } from '../src/ml/changes'
 import type { ComparableSource, ExperimentPrelude } from '../src/ml/experiment'
 import {
   assembleExperiment,
@@ -615,5 +615,166 @@ describe('학습을 중단한 실험', () => {
     const stopped = await stoppedAfter(wider, first, 1)
 
     expect(stopped.changed).toEqual(['split.testSize'])
+  })
+})
+
+/**
+ * 실험 하나가 쓴 설정 (`experimentSettings`).
+ *
+ * **차이 보기와 같은 등록부를 지나는지를 잰다.** 어휘가 두 벌이 되면 *"바뀐 것"*은
+ * `중앙값으로 대체하기`인데 *"설정"*은 `median`이라고 적는 날이 온다 — 그때 이 파일의
+ * `같은 어휘로 말한다`가 운다.
+ */
+describe('실험 하나가 쓴 설정을 읽는다', () => {
+  it('첫 실험에도 나온다 - 바뀐 것은 비어 있어도 과정은 평가된다', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+
+    expect(first.changed ?? []).toEqual([])
+    expect(experimentSettings(first).length).toBeGreaterThan(0)
+  })
+
+  it('타깃과 특성을 낸다 - 평가에서 가장 먼저 보는 둘이다', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+    const rows = experimentSettings(first)
+
+    const target = rows.find((one) => one.path === 'target')
+    expect(target?.value).toEqual({ kind: 'literal', text: IRIS_TARGET_COLUMN })
+
+    // **이름까지 들고 온다.** 개수만으로는 어느 열을 골랐는지 알 수 없다.
+    const features = rows.find((one) => one.path === 'features')
+    expect(features?.value.kind).toBe('count')
+    if (features?.value.kind === 'count') {
+      expect(features.value.count).toBe(IRIS_FEATURE_COLUMNS.length)
+      expect([...(features.value.items ?? [])].sort()).toEqual([...IRIS_FEATURE_COLUMNS].sort())
+    }
+  })
+
+  it('전처리와 분할을 낸다 - 어떻게 다듬고 어떻게 나눴는가', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+    const paths = experimentSettings(first).map((one) => one.path)
+
+    for (const path of [
+      'preprocessing.missing',
+      'preprocessing.scaling',
+      'preprocessing.categoricalEncoding',
+      'split.testSize',
+      'split.randomState',
+    ]) {
+      expect(paths, path).toContain(path)
+    }
+  })
+
+  /**
+   * **같은 어휘로 말한다.** 바뀐 것과 설정이 같은 `describe`를 지나므로, 바뀐 쪽의
+   * `to`와 설정 쪽의 값이 **글자까지 같아야** 한다.
+   */
+  it('바뀐 것과 설정이 같은 어휘를 쓴다', async () => {
+    const { second } = await twice({
+      preprocessing: { missing: 'median', scaling: 'standard', categoricalEncoding: 'onehot' },
+    })
+    const changed = describeChanges(second, second, ['preprocessing.missing'])
+    const setting = experimentSettings(second).find((one) => one.path === 'preprocessing.missing')
+
+    expect(setting?.value).toEqual(changed[0]?.to)
+    expect(setting?.labelKey).toBe(changed[0]?.labelKey)
+  })
+
+  /**
+   * **없는 것은 줄이 안 난다** (§9.2). 표 프로젝트에 사진 설정을 보여주면 학생은
+   * 자기가 안 한 일을 설명해야 한다.
+   */
+  it('그 종류에 없는 설정은 줄이 안 난다', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+    const paths = experimentSettings(first).map((one) => one.path)
+
+    for (const path of ['categories', 'backboneId', 'pcaComponents', 'rowsHash']) {
+      expect(paths, path).not.toContain(path)
+    }
+  })
+
+  it('사진 프로젝트에서는 사진 설정이 나오고 열 설정이 빠진다', async () => {
+    const { first } = await twice({})
+    const image: ComparableSource = {
+      ...first,
+      settings: {
+        ...first.settings,
+        data: {
+          categories: ['개', '고양이'],
+          categoryCounts: [10, 12],
+          unlabeledCount: 0,
+          backboneId: 'mobilenet-v2-r2',
+          rowsHash: 'abc123',
+        } as never,
+      },
+    }
+    const paths = experimentSettings(image).map((one) => one.path)
+
+    expect(paths).toContain('categories')
+    expect(paths).toContain('backboneId')
+    expect(paths).not.toContain('target')
+    expect(paths).not.toContain('features')
+  })
+
+  /** **읽는 차례가 있다.** 타깃이 특성보다, 특성이 전처리보다 앞이다. */
+  it('읽는 차례대로 낸다', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+    const paths = experimentSettings(first).map((one) => one.path)
+
+    expect(paths.indexOf('target')).toBeLessThan(paths.indexOf('features'))
+    expect(paths.indexOf('features')).toBeLessThan(paths.indexOf('preprocessing.missing'))
+    expect(paths.indexOf('preprocessing.missing')).toBeLessThan(paths.indexOf('split.testSize'))
+  })
+
+  /** 하이퍼파라미터는 모델마다 이미 보인다 — 여기서 또 보이면 같은 것이 두 번이다. */
+  it('하이퍼파라미터는 내지 않는다', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+
+    expect(experimentSettings(first).every((one) => !one.path.startsWith('hyperparameters'))).toBe(
+      true,
+    )
+  })
+})
+
+/**
+ * **학습이 무시하는 값은 설정으로 말하지 않는다.**
+ *
+ * 회귀의 `stratify`는 파일에 `true`로 남아 있다 — 유형을 바꿀 때 값을 내리지 않는 것이
+ * 결정이기 때문이다 (`ml/selection.ts`). 그대로 보이면 평가하는 사람이 *"층화를
+ * 썼다"*고 읽는데 **그런 일은 없었다.**
+ */
+describe('과제 유형에서 안 걸리는 설정은 빠진다', () => {
+  it('회귀에서는 범주 비율 유지가 안 나온다', async () => {
+    const { first } = await twice({})
+    const regression: ComparableSource = {
+      ...first,
+      settings: { ...first.settings, taskType: 'regression' },
+    }
+
+    // 파일에는 남아 있다 — 유형을 바꿀 때 값을 안 내리는 것이 결정이다.
+    expect(regression.settings.split.stratify).toBe(true)
+    expect(experimentSettings(regression).map((one) => one.path)).not.toContain('split.stratify')
+    // 분할 자체는 회귀에도 있다.
+    expect(experimentSettings(regression).map((one) => one.path)).toContain('split.testSize')
+  })
+
+  it('분류에서는 그대로 나온다 - 학생이 끈 것도 한 일이다', async () => {
+    const first = (await runExperiment(inputFor(settingsFor()))).experiment
+
+    expect(experimentSettings(first).map((one) => one.path)).toContain('split.stratify')
+  })
+
+  it('군집화에서는 분할 설정이 통째로 빠진다 - 나누지 않는다', async () => {
+    const { first } = await twice({})
+    const clustering: ComparableSource = {
+      ...first,
+      settings: { ...first.settings, taskType: 'clustering' },
+    }
+    const paths = experimentSettings(clustering).map((one) => one.path)
+
+    for (const path of ['split.method', 'split.testSize', 'split.stratify']) {
+      expect(paths, path).not.toContain(path)
+    }
+    // 분할과 무관한 것은 그대로 남는다.
+    expect(paths).toContain('preprocessing.missing')
   })
 })

@@ -13,6 +13,8 @@
 
 import { HASH_PREVIEW_LENGTH } from '../limits'
 import { comparablePair, sharedModelKeys, type ComparableSource } from './experiment'
+import { splitsData, stratifyApplies } from './selection'
+import type { TaskType } from '../project/schema'
 
 /**
  * 전후 값 하나의 서술.
@@ -356,4 +358,98 @@ export function describeChanges(
         to: describe(at(after, steps)),
       }
     })
+}
+
+/** 설정 한 줄. **전후가 없다** — 지금 값 하나뿐이다. */
+export interface Setting {
+  readonly path: string
+  /** 라벨의 로케일 키. **등록부에 없는 경로는 아예 안 낸다** (아래 `SETTING_PATHS`). */
+  readonly labelKey: string
+  readonly value: ChangeValue
+}
+
+/**
+ * **읽는 차례다.** 학생이 전처리 화면에서 위에서 아래로 만나는 순서 그대로 — 무엇을
+ * 맞히려 했는지(타깃), 무엇으로 맞혔는지(특성), 그 값을 어떻게 다듬었는지(전처리),
+ * 얼마나 썼고 어떻게 나눴는지(분할) 순이다.
+ *
+ * **등록부에 있는 경로를 전부 늘어놓지 않는다.** `LABELS`는 "문장을 아는 것"의 목록이고
+ * 이것은 **"평가하는 사람이 읽어야 하는 것"**의 목록이라 범위가 다르다. 하이퍼파라미터가
+ * 여기 없는 이유도 그것이다 — 모델마다 이미 보인다(`results/panels/ParameterPanel.vue`).
+ *
+ * **이미지 칸이 뒤에 함께 선다.** 종류로 가르지 않는 이유는 **값이 없으면 줄이 안 나기**
+ * 때문이다(아래 `experimentSettings`) — 표 프로젝트에는 `categories`가 애초에 없다.
+ */
+const SETTING_PATHS: readonly string[] = [
+  'taskType',
+  'target',
+  'features',
+  'preprocessing.missing',
+  'preprocessing.outliers',
+  'preprocessing.ranges',
+  'preprocessing.scaling',
+  'preprocessing.categoricalEncoding',
+  'nSamples',
+  'split.method',
+  'split.testSize',
+  'split.stratify',
+  'split.randomState',
+  'categories',
+  'categoryCounts',
+  'unlabeledCount',
+  'backboneId',
+  'pcaComponents',
+  'rowsHash',
+]
+
+/**
+ * 이 과제 유형에서 **그 설정이 실제로 걸리는가**.
+ *
+ * **파일에 적혀 있다고 다 보여주면 거짓말이 된다.** `stratify`는 회귀에서도 파일에
+ * 남아 있지만(값을 내리지 않는 것이 결정이다 — `ml/selection.ts`) **학습은 무시한다.**
+ * 그대로 보이면 평가하는 사람이 *"층화를 썼다"*고 읽는데, 그런 일은 없었다.
+ * 군집화의 분할 설정도 같다 — 나누지 않으므로 테스트 비율에 뜻이 없다.
+ *
+ * **판정을 새로 짓지 않는다.** 학습이 쓰는 그 함수를 그대로 부른다 — 두 벌이면
+ * 화면과 학습이 다른 것을 말하는 날이 온다.
+ */
+function applies(path: string, taskType: TaskType | undefined): boolean {
+  if (!path.startsWith('split.')) return true
+  // **나누는지를 먼저 묻는다.** 군집화는 나누지 않으므로 층화를 물을 자리조차 없다 —
+  // 순서를 뒤집으면 `stratifyApplies`가 군집화를 모르기 때문에 그 한 줄이 살아 나온다.
+  if (!splitsData(taskType)) return false
+  return path === 'split.stratify' ? stratifyApplies(taskType, true) : true
+}
+
+/**
+ * 실험 하나가 **실제로 쓴 설정**. 결과 화면이 이것을 읽는다.
+ *
+ * **차이 보기와 같은 등록부를 지난다** (`LABELS`). 어휘를 두 벌로 두면 *"바뀐 것"*에서는
+ * `중앙값으로 대체하기`인데 *"설정"*에서는 `median`이라고 적히는 날이 온다.
+ *
+ * **평평하게 펴는 일도 `comparablePair`가 한다.** 자기 자신과 견주면 `after`가 곧 이
+ * 실험의 값이고, 그러면 경로 규칙이 한 벌로 남는다 — 하이퍼파라미터를 묶는 방식이나
+ * 이미지 스냅샷을 펴는 방식이 **갈릴 자리가 없다.**
+ *
+ * **값이 없는 줄은 안 낸다.** 표 프로젝트의 `categories`, 사진 프로젝트의 `target`이
+ * 그렇다 — 종류로 가르는 `if` 없이 **없는 것은 없는 채로** 빠진다 (§9.2 "없는 것을
+ * 이름으로 말하지 않는다").
+ */
+export function experimentSettings(source: ComparableSource): Setting[] {
+  const { after } = comparablePair(source, source)
+  const taskType = source.settings.taskType
+
+  const rows: Setting[] = []
+  for (const path of SETTING_PATHS) {
+    const known = LABELS[path]
+    if (!known) continue
+    if (!applies(path, taskType)) continue
+    const value = known.describe(at(after, path.split('.')))
+    if (value.kind === 'absent') continue
+    // 빈 목록도 할 말이 없다 — `이상치 범위 0개`는 "안 정했다"와 같은 말이고,
+    // 그 사실은 `이상치 처리: 하지 않음` 줄이 이미 말한다.
+    if (value.kind === 'count' && value.count === 0) continue
+    rows.push({ path, labelKey: known.labelKey, value })
+  }
+  return rows
 }

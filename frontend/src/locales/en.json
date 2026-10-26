@@ -955,6 +955,8 @@
     "cellWrong": "Predictions in this cell differ from the actual value.",
     "change": "{from} → {to}",
     "changeTitle": "Changed since the previous experiment",
+    "settingsTitle": "Settings used in this experiment",
+    "settingItems": "See the list",
     "clusterName": "Cluster {index}",
     "noiseName": "Noise (in no cluster)",
     "confusion": "Confusion matrix",

@@ -16,13 +16,14 @@ import AppTable from '@/components/AppTable.vue'
 import TermPopover from '@/components/TermPopover.vue'
 import { useFormat } from '@/composables/useFormat'
 import { errorMessageKey, type ClientErrorCode } from '@/errors'
-import { describeChanges } from '@/ml/changes'
+import { describeChanges, experimentSettings } from '@/ml/changes'
 import { metricsOf, type MetricDisplay } from '@/ml/metrics'
 import type { Dataset, Preprocessor } from '@/ml/preprocess'
 import { bestByMetric, doneRuns, failedRuns, whereTrainedKeyOf } from '@/ml/results'
 import type { DataType, Experiment, Run } from '@/project/schema'
 import ChangeList from './ChangeList.vue'
 import RunDetail from './RunDetail.vue'
+import SettingList from './SettingList.vue'
 
 const props = defineProps<{
   experiment: Experiment
@@ -82,6 +83,12 @@ const changes = computed(() => {
   if (!previous || !paths) return []
   return describeChanges(previous, props.experiment, paths)
 })
+
+/**
+ * 이 실험이 쓴 설정. **바뀐 것과 달리 직전 실험이 없어도 나온다** — 첫 실험의 과정도
+ * 평가되어야 한다.
+ */
+const settings = computed(() => experimentSettings(props.experiment))
 
 /** 속을 펼쳐 볼 run. 실험을 옮기면 그 실험의 첫 줄로 돌아간다. */
 const openedRun = ref<string | null>(null)
@@ -174,6 +181,24 @@ function failureDetailOf(run: Run): string | null {
       </AppBadge>
       <ChangeList v-else :changes="changes" />
     </section>
+
+    <!--
+      **이 실험이 무엇으로 했는가.** 위가 *"무엇이 바뀌었나"*라면 여기는 *"무엇으로
+      했나"*다 — 첫 실험이거나 설정을 안 바꾸고 다시 학습하면 위는 비는데, 그때도
+      과정은 평가되어야 한다 (CLAUDE.md §1.3).
+
+      **접어 둔다.** 학생은 자기가 방금 고른 값이라 이미 알고, 매번 펼쳐 두면 정작
+      보러 온 점수가 아래로 밀린다. 평가하는 사람에게는 한 번의 클릭이고, 그 자리가
+      늘 같은 곳이라 찾는 데 드는 비용이 없다.
+    -->
+    <details v-if="settings.length > 0" class="flex flex-col gap-1.5">
+      <summary class="cursor-pointer font-bold text-ink-soft">
+        {{ t('results.settingsTitle') }}
+      </summary>
+      <div class="mt-1.5">
+        <SettingList :settings="settings" />
+      </div>
+    </details>
 
     <section v-if="succeeded.length > 0" class="flex min-w-0 flex-col gap-1.5">
       <h3 class="font-bold text-ink-soft">{{ t('results.scoreTitle') }}</h3>

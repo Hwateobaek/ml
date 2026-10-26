@@ -955,6 +955,8 @@
     "cellWrong": "실제 값과 다르게 예측한 칸입니다.",
     "change": "{from} → {to}",
     "changeTitle": "직전 실험에서 바뀐 것",
+    "settingsTitle": "이 실험의 설정",
+    "settingItems": "목록 보기",
     "clusterName": "{index}번 군집",
     "noiseName": "잡음(어느 군집에도 속하지 않음)",
     "confusion": "혼동 행렬(Confusion Matrix)",
