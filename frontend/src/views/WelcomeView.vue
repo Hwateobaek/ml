@@ -95,6 +95,13 @@ function pickDataType(id: string): void {
   if (kind !== undefined) dataType.value = kind.dataType
 }
 const removing = ref<ProjectSummary | null>(null)
+const removingMany = ref<ProjectSummary[]>([])
+const removeDialogOpen = computed(() => removing.value !== null || removingMany.value.length > 0)
+const removeDescription = computed(() =>
+  removing.value !== null
+    ? t('projects.deleteDescription', { name: removing.value.name })
+    : t('projects.deleteManyDescription', { count: removingMany.value.length }),
+)
 
 /**
  * 프로젝트 목록. **지우기 확인창을 닫은 뒤 다시 열어 주려고** 잡아 둔다.
@@ -107,6 +114,7 @@ const picker = ref<InstanceType<typeof ProjectPicker> | null>(null)
 /** 확인창을 닫고 목록을 되돌린다. 확인창이 화면에서 사라진 뒤라야 열린다. */
 function closeRemove(): void {
   removing.value = null
+  removingMany.value = []
   void nextTick(() => picker.value?.open())
 }
 const openInput = ref<HTMLInputElement | null>(null)
@@ -214,11 +222,17 @@ async function openFile(event: Event): Promise<void> {
  * 잡은 것은 `withTabLock`이 곧바로 놓는다 - 없어진 프로젝트를 쥐고 있을 이유가 없다.
  */
 async function remove(): Promise<void> {
-  const target = removing.value
-  if (!target || busy.value) return
+  const targets = removing.value === null ? removingMany.value : [removing.value]
+  if (targets.length === 0 || busy.value) return
   const job = start()
   try {
-    await withTabLock(target.projectId, () => deleteProject(target.projectId))
+    for (const target of targets) {
+      try {
+        await withTabLock(target.projectId, () => deleteProject(target.projectId))
+      } catch (error) {
+        toasts.pushError(error)
+      }
+    }
     await refresh()
     closeRemove()
   } catch (error) {
@@ -289,6 +303,7 @@ onMounted(refresh)
           :disabled="busy"
           @open="openProject"
           @remove="removing = $event"
+          @remove-many="removingMany = $event"
         />
       </div>
 
@@ -367,13 +382,18 @@ onMounted(refresh)
       </AppDialog>
 
       <AppDialog
-        :open="removing !== null"
-        :title="t('projects.deleteTitle')"
-        :description="t('projects.deleteDescription', { name: removing?.name ?? '' })"
+        :open="removeDialogOpen"
+        :title="t(removingMany.length > 0 ? 'projects.deleteManyTitle' : 'projects.deleteTitle')"
+        :description="removeDescription"
         @close="closeRemove"
       >
+        <ul v-if="removingMany.length > 0" class="max-h-48 list-inside list-disc overflow-y-auto">
+          <li v-for="target in removingMany" :key="target.projectId" class="break-words">
+            {{ target.name }}
+          </li>
+        </ul>
         <template #actions>
-          <AppButton variant="secondary" @click="removing = null">{{
+          <AppButton variant="secondary" :disabled="busy" @click="closeRemove">{{
             t('common.cancel')
           }}</AppButton>
           <AppButton variant="danger" :action="remove">

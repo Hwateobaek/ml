@@ -10,7 +10,7 @@
  * 것을 우리가 짜지 않는다. 그리고 **작업을 막지 않는다.**
  */
 
-import { ref, useId } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import AppButton from '@/components/AppButton.vue'
@@ -33,6 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [projectId: string]
   remove: [summary: ProjectSummary]
+  removeMany: [summaries: ProjectSummary[]]
 }>()
 
 const { t } = useI18n()
@@ -40,6 +41,29 @@ const format = useFormat()
 
 const popoverId = useId()
 const panel = ref<HTMLElement | null>(null)
+const selectedIds = ref<string[]>([])
+const selected = computed(() =>
+  props.summaries.filter((one) => selectedIds.value.includes(one.projectId)),
+)
+const allSelected = computed(
+  () => props.summaries.length > 0 && selected.value.length === props.summaries.length,
+)
+const selectionBlocked = computed(() => props.disabled === true || selected.value.length === 0)
+
+watch(
+  () => props.summaries,
+  () => {
+    selectedIds.value = selected.value.map((one) => one.projectId)
+  },
+)
+
+function toggleAll(event: Event): void {
+  const input = event.target as HTMLInputElement
+  if (props.disabled !== true) {
+    selectedIds.value = input.checked ? props.summaries.map((one) => one.projectId) : []
+  }
+  input.checked = allSelected.value
+}
 
 /**
  * 목록을 다시 연다. **확인창이 닫힌 뒤에 화면이 부른다.**
@@ -110,12 +134,46 @@ function lockReason(summary: ProjectSummary): string | null {
       <h3 class="mb-1 font-bold">{{ t('projects.saved') }}</h3>
       <p class="mb-4 text-ink-faint">{{ t('projects.savedCount', summaries.length) }}</p>
 
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <label class="mr-auto flex items-center gap-2">
+          <input
+            type="checkbox"
+            :checked="allSelected"
+            :indeterminate="selected.length > 0 && !allSelected"
+            :disabled="props.disabled"
+            @change="toggleAll"
+          />
+          {{ t('projects.selectAll') }}
+        </label>
+        <AppButton
+          variant="secondary"
+          :disabled="selectionBlocked"
+          @click="emit('removeMany', selected)"
+        >
+          {{ t('projects.deleteSelected', { count: selected.length }) }}
+        </AppButton>
+        <AppButton
+          variant="ghost-danger"
+          :disabled="props.disabled"
+          @click="emit('removeMany', [...summaries])"
+        >
+          {{ t('projects.deleteAll') }}
+        </AppButton>
+      </div>
+
       <ul class="flex max-h-96 flex-col gap-2 overflow-y-auto">
         <li
           v-for="summary in summaries"
           :key="summary.projectId"
           class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-panel border border-line px-3 py-2 transition-colors hover:border-brand-line hover:bg-surface-sunken"
         >
+          <input
+            v-model="selectedIds"
+            type="checkbox"
+            :value="summary.projectId"
+            :aria-label="t('projects.selectProject', { name: summary.name })"
+            :disabled="props.disabled"
+          />
           <!--
             **못 읽는 것도 목록에 남는다** (architecture.md §8.10.2). 빼면 학생 눈에는
             프로젝트가 사라진 것으로 보인다. 열기만 막고 지우기는 아래에 그대로 둔다 —

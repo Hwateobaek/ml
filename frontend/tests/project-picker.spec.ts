@@ -44,6 +44,33 @@ beforeEach(async () => {
 })
 
 describe('R24 B-7: opening a saved project', () => {
+  it('deletes only checked projects, supports select all, and prunes removed selections', async () => {
+    const wrapper = mount(ProjectPicker, {
+      props: { summaries: SUMMARIES },
+      global: { plugins: [i18n] },
+    })
+    const selectedButton = () =>
+      wrapper.findAll('button').find((one) => one.text().includes('선택 삭제'))!
+    const allButton = () =>
+      wrapper.findAll('button').find((one) => one.text() === '프로젝트 전체 삭제')!
+    expect(selectedButton().attributes('disabled')).toBeDefined()
+    await wrapper.findAll('li input')[1]!.setValue(true)
+    await selectedButton().trigger('click')
+    expect(wrapper.emitted('removeMany')).toEqual([[[SUMMARIES[1]]]])
+    expect(wrapper.emitted('remove')).toBeUndefined()
+    expect(wrapper.emitted('open')).toBeUndefined()
+    await wrapper.find('input').setValue(true)
+    expect(
+      wrapper.findAll('li input').every((one) => (one.element as HTMLInputElement).checked),
+    ).toBe(true)
+    await allButton().trigger('click')
+    expect(wrapper.emitted('removeMany')?.[1]).toEqual([SUMMARIES])
+    await wrapper.setProps({ summaries: [SUMMARIES[0]!] })
+    expect(selectedButton().text()).toContain('(1)')
+    await wrapper.find('input').setValue(false)
+    expect(selectedButton().attributes('disabled')).toBeDefined()
+  })
+
   it('the readable row opens and the unreadable one is locked with a reason', async () => {
     const wrapper = mount(ProjectPicker, {
       props: { summaries: SUMMARIES },

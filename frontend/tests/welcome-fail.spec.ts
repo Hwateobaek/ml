@@ -266,6 +266,42 @@ describe('R27: 다른 탭이 쥔 프로젝트는 목록 화면도 못 건드린�
     expect(dangers()).toHaveLength(0)
     expect(await loadProject(id)).toBeNull()
   })
+
+  it('bulk deletion requires confirmation, can be cancelled, and preserves projects open elsewhere', async () => {
+    const first = projectFile()
+    const second = projectFile()
+    second.document.manifest.projectId = '00000000-0000-4000-8000-000000000002'
+    await saveProject(first)
+    await saveProject(second)
+    const firstId = first.document.manifest.projectId
+    stubLocksHeldElsewhere([firstId])
+    const { wrapper, view } = await welcome()
+    const all = () => wrapper.findAll('button').find((one) => one.text() === '프로젝트 전체 삭제')!
+    await all().trigger('click')
+    await settle()
+    expect(await loadProject(firstId)).not.toBeNull()
+    expect(await loadProject('00000000-0000-4000-8000-000000000002')).not.toBeNull()
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '취소')!
+      .trigger('click')
+    await settle()
+    expect(await loadProject('00000000-0000-4000-8000-000000000002')).not.toBeNull()
+    await all().trigger('click')
+    await settle()
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '삭제')!
+      .trigger('click')
+    await settle()
+    await settle()
+    expect(await loadProject(firstId)).not.toBeNull()
+    expect(await loadProject('00000000-0000-4000-8000-000000000002')).toBeNull()
+    expect(dangers().map((one) => one.key)).toEqual(['client.PROJECT_OPEN_ELSEWHERE'])
+    expect(view.busy).toBe(false)
+    expect(wrapper.findAll('li')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })
 
 describe('R23: creating when storage refuses', () => {
