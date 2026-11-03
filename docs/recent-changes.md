@@ -21,7 +21,12 @@ Codex와 Claude가 함께 사용하는 인계 문서다. 최신 항목을 맨 �
   제도가 한국의 것이라 그대로 번역하면 밖에서 뜻이 없다.
 - 검증: `npm run ci` 전체 통과(165개 테스트 파일, 3,325개 통과·2개 제외). 내장 양식을 훑는
   `locales.spec.ts`의 순우리말 검사와 `portfolio-preset.spec.ts`의 파서 검사를 함께 지났다.
-- 진행 중. 배포 결과는 아래에 갱신한다.
+- 올림: `main`에 밀어 올렸다(`0303fab`). [CI 실행 41576864251](https://github.com/Hwateobaek/ml/actions/runs/41576864251)이
+  `success`로 끝났다.
+- **공개 배포는 아직이다.** `deploy.yml`이 `workflow_dispatch` 전용이라 미는 것으로는
+  배포되지 않는다(수업 중 사고를 막으려는 결정 — `open-decisions.md` #10-1). 저장소의
+  Actions → Deploy frontend → Run workflow를 사람이 눌러야 한다. **누르기 전까지 공개
+  사이트의 양식은 여덟 문항이다.**
 
 ## 2026-10-26 — 결과 탭에 실험 설정 표시
 
