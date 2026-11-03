@@ -23,10 +23,29 @@ Codex와 Claude가 함께 사용하는 인계 문서다. 최신 항목을 맨 �
   `locales.spec.ts`의 순우리말 검사와 `portfolio-preset.spec.ts`의 파서 검사를 함께 지났다.
 - 올림: `main`에 밀어 올렸다(`0303fab`). [CI 실행 41576864251](https://github.com/Hwateobaek/ml/actions/runs/41576864251)이
   `success`로 끝났다.
-- **공개 배포는 아직이다.** `deploy.yml`이 `workflow_dispatch` 전용이라 미는 것으로는
-  배포되지 않는다(수업 중 사고를 막으려는 결정 — `open-decisions.md` #10-1). 저장소의
-  Actions → Deploy frontend → Run workflow를 사람이 눌러야 한다. **누르기 전까지 공개
-  사이트의 양식은 여덟 문항이다.**
+- 배포: 사본 소유자가 Deploy frontend를 수동으로 실행해 완료했다. 결과는 아래와 같다.
+
+### 배포 결과
+
+- 대상: `Hwateobaek/ml`의 `main`, [공개 사이트](https://hwateobaek.github.io/ml/).
+- 배포한 커밋: `104adf7`(기능 커밋은 `0303fab`).
+- [배포 실행 41580060309](https://github.com/Hwateobaek/ml/actions/runs/41580060309): `success`.
+- 확인: 공개 사이트의 `portfolio/default.ko.md`와 `default.en.md`를 직접 받아, 두 파일 모두
+  문항이 아홉이고 아홉 번째가 `{#conclusion}`인 것을 확인했다. `portfolio/index.json`과
+  사이트 모두 HTTP 200이다.
+
+### 남은 일 — 검사 하나가 시간에 쫓긴다
+
+- `104adf7`(문서만 바꾼 커밋)에서 CI가 빨개졌다. **이 변경 때문이 아니다** —
+  `locales.spec.ts`의 `동작의 이름에 순우리말을 쓰지 않는다`가 5초 제한에서 시간 초과했고,
+  그 검사는 **로케일 JSON만 읽는다**(이번에 바꾼 것은 `public/portfolio/`의 `.md` 둘이고,
+  그쪽을 읽는 바로 옆 검사는 통과한다).
+- 잰 것: 로케일 문구 942개 × 걷어낸 낱말 73개 = **`expect` 호출 68,766번**. 단독으로 돌리면
+  통과하고(측정 3회), 전체 묶음이 병렬로 돌 때 6.2초·10.5초로 넘쳤다. **고질이지 이번
+  회귀가 아니다.**
+- 고치는 길: 짝마다 `expect`를 부르지 말고 **어긋난 것을 모아 한 번만 단정**하면 호출이
+  6만 8천 번에서 한 번으로 준다. 잡는 범위는 그대로다. **손대지 않았다** — 검사를 고치는
+  것은 감사 국면의 일이고 그 국면은 사용자가 연다(CLAUDE.md §4).
 
 ## 2026-10-26 — 결과 탭에 실험 설정 표시
 
