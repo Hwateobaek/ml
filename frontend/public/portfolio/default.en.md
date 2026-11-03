@@ -35,3 +35,7 @@ Write what the limits of your data and your model were. Write what you would imp
 ## Solving problems, and what I learned {#reflection}
 
 Write about the hardest problem you ran into and how you worked through it. Write what you learned, how you grew, and what you would do differently next time.
+
+## Conclusion: looking back, and what comes next {#conclusion}
+
+Look back at the whole project and write your conclusion. Write what the results mean, what you now understand about this topic, and what you would like to explore next. Write this in detail — it may be quoted in your school record.
