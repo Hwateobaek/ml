@@ -25,6 +25,7 @@ function summary(overrides: Partial<ProjectSummary> = {}): ProjectSummary {
     updatedAt: '2026-09-02T09:00:00.000Z',
     sizeBytes: 1024,
     readable: true,
+    locked: false,
     ...overrides,
   }
 }

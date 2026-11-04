@@ -622,7 +622,17 @@
     "opening": "Opening a file.",
     "unreadable": "This project cannot be opened",
     "saved": "Projects on this computer",
-    "savedCount": "This computer holds {count} project | This computer holds {count} projects"
+    "savedCount": "This computer holds {count} project | This computer holds {count} projects",
+    "password": "Password",
+    "passwordHint": "Set one and this browser asks for it every time you open the project. Leave it empty and it never asks. It is not written into the .mlpx file you export.",
+    "passwordMemo": "Password hint",
+    "passwordMemoHint": "A clue for when you forget. The password itself is never stored, so if you forget it you cannot open this project.",
+    "passwordMemoShown": "Hint: {hint}",
+    "passwordWrong": "That password is not right.",
+    "unlockTitle": "Enter password",
+    "unlockDescription": "You need the password to open this project. ({name})",
+    "unlock": "Open",
+    "lockedLabel": "Password-protected project"
   },
   "common": {
     "cancel": "Cancel",
@@ -724,6 +734,7 @@
     "ENGINE_NOT_WIRED": "This is still being built. Train somewhere else for now.",
     "BACKBONE_UNAVAILABLE": "Could not finish getting ready for image training. Check your internet connection and try again. If your school network is blocking it, tell your teacher.",
     "PROJECT_OPEN_ELSEWHERE": "This project is already open in another tab. Continue there, or close that tab and open it again.",
+    "PROJECT_LOCKED": "This project is locked. Pick it from the list and enter its password.",
     "PROJECT_FILE_NOT_ZIP": "This file is not a project file.",
     "PROJECT_FILE_ENTRY_MISSING": "The project file is missing something it needs. ({entry})",
     "PROJECT_FILE_INVALID": "The project file could not be read. ({path})",

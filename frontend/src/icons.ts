@@ -17,6 +17,7 @@ import {
   ChartScatter,
   Check,
   Circle,
+  Lock,
   ChevronDown,
   ChevronUp,
   Shapes,
@@ -103,4 +104,9 @@ export const ACTION_ICONS = {
    * 설명이 딸린 팝오버가 열리기 때문이다. 그림은 동작이 아니라 대상을 가리킨다.
    */
   limits: Gauge,
+  /**
+   * 비밀번호가 걸린 프로젝트. **색만으로 말하지 않기 위한 표시다**
+   * (architecture.md §8.18) - 자물쇠 옆에 읽을 글이 함께 선다.
+   */
+  passwordLocked: Lock,
 } as const satisfies Record<string, LucideIcon>

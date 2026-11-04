@@ -24,14 +24,17 @@ import {
   markExported,
   readExportedAt,
   readLimitsOff,
+  readLock,
   readPreferredLocale,
   roomShortfall,
   saveProject,
   totalBytes,
   writeLimitsOff,
+  writeLock,
   writePreferredLocale,
 } from '../src/project/storage'
 import { hashBytes } from '../src/hash'
+import { checkLock, makeLock } from '../src/project/lock'
 import { STORAGE_SAFETY_FACTOR } from '../src/limits'
 import type { ProjectFile } from '../src/project/format'
 import { dataSettings, FORMAT_VERSION } from '../src/project/schema'
@@ -977,5 +980,81 @@ describe('저장소가 던져도 안전한 쪽으로 떨어진다', () => {
     await raw.put('preferences', true, 'locale')
     raw.close()
     await expect(readPreferredLocale()).resolves.toBeNull()
+  })
+})
+
+/**
+ * 프로젝트 잠금 (open-decisions.md "프로젝트에 잠금을 걸 수 있다 — 파일에는 안 들어간다").
+ *
+ * **여기서 가장 중요한 것은 자동 저장이 잠금을 지우지 않는가다.** 저장은 몇 초마다
+ * 저절로 도는데 잠금은 학생이 일부러 건 것이라, 저장이 덮어쓰면 **화면에 아무것도
+ * 안 뜬 채로 문이 열린다.** `exportedAt`이 같은 자리에서 같은 이유로 보호된다.
+ */
+describe('프로젝트 잠금', () => {
+  beforeEach(async () => {
+    closeStorage()
+    await deleteDatabase()
+  })
+
+  afterEach(() => {
+    closeStorage()
+  })
+
+  it('안 걸면 잠기지 않는다 — 지금까지와 같다', async () => {
+    await saveProject(projectFile())
+    expect(await readLock(manifest.projectId)).toBeNull()
+    const [summary] = await listProjects()
+    expect(summary?.locked).toBe(false)
+  })
+
+  it('걸면 목록이 잠김과 힌트를 보인다', async () => {
+    await saveProject(projectFile())
+    await writeLock(manifest.projectId, makeLock('1234', '생일'))
+
+    const [summary] = await listProjects()
+    expect(summary?.locked).toBe(true)
+    expect(summary?.hint).toBe('생일')
+  })
+
+  it('자동 저장이 잠금을 지우지 않는다', async () => {
+    await saveProject(projectFile())
+    await writeLock(manifest.projectId, makeLock('1234'))
+
+    // 학생이 작업을 이어 가면 저장이 다시 돈다.
+    await saveProject(projectFile())
+
+    const lock = await readLock(manifest.projectId)
+    expect(lock).not.toBeNull()
+    expect(lock && checkLock(lock, '1234')).toBe(true)
+  })
+
+  it('풀면 키 자체가 사라진다 — "안 잠김"과 "값이 undefined"를 섞지 않는다', async () => {
+    await saveProject(projectFile())
+    await writeLock(manifest.projectId, makeLock('1234'))
+    await writeLock(manifest.projectId, null)
+
+    expect(await readLock(manifest.projectId)).toBeNull()
+    const database = await openDB(DB_NAME, DB_VERSION)
+    const record = await database.get('projects', manifest.projectId)
+    database.close()
+    expect(record).not.toHaveProperty('lock')
+  })
+
+  it('없는 프로젝트에는 잠금을 붙이지 않는다 — 지워진 것을 되살리면 안 된다', async () => {
+    await writeLock('없는-프로젝트', makeLock('1234'))
+    expect(await listProjects()).toHaveLength(0)
+  })
+
+  /**
+   * **파일에는 안 들어간다.** 교사가 받은 `.mlpx`는 비밀번호 없이 열려야 한다
+   * (CLAUDE.md §1.3). 잠금이 문서에 섞여 들어가면 그 약속이 깨진다.
+   */
+  it('잠금은 문서에 섞이지 않는다 — .mlpx로 따라가지 않는다', async () => {
+    await saveProject(projectFile())
+    await writeLock(manifest.projectId, makeLock('1234', '생일'))
+
+    const loaded = await loadProject(manifest.projectId)
+    expect(JSON.stringify(loaded?.document)).not.toContain('생일')
+    expect(loaded?.document).not.toHaveProperty('lock')
   })
 })

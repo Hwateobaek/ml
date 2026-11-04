@@ -622,7 +622,17 @@
     "opening": "파일을 여는 중입니다.",
     "unreadable": "열 수 없는 프로젝트",
     "saved": "이 컴퓨터의 프로젝트",
-    "savedCount": "이 컴퓨터에 프로젝트가 {count}개 있습니다."
+    "savedCount": "이 컴퓨터에 프로젝트가 {count}개 있습니다.",
+    "password": "비밀번호",
+    "passwordHint": "정하면 이 컴퓨터에서 프로젝트를 열 때마다 물어봅니다. 비워 두면 묻지 않습니다. 파일로 내보낸 .mlpx에는 들어가지 않습니다.",
+    "passwordMemo": "비밀번호 힌트",
+    "passwordMemoHint": "잊었을 때 볼 단서입니다. 비밀번호 자체는 저장되지 않으므로, 잊으면 이 프로젝트를 열 수 없습니다.",
+    "passwordMemoShown": "힌트: {hint}",
+    "passwordWrong": "비밀번호가 맞지 않습니다.",
+    "unlockTitle": "비밀번호 입력",
+    "unlockDescription": "비밀번호를 입력해야 이 프로젝트를 열 수 있습니다. ({name})",
+    "unlock": "열기",
+    "lockedLabel": "비밀번호가 걸린 프로젝트"
   },
   "common": {
     "cancel": "취소",
@@ -724,6 +734,7 @@
     "ENGINE_NOT_WIRED": "아직 만드는 중인 기능입니다. 지금은 다른 곳에서 학습해 주세요.",
     "BACKBONE_UNAVAILABLE": "이미지 학습 준비를 마치지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요. 학교 네트워크가 막고 있다면 선생님께 말씀드려야 합니다.",
     "PROJECT_OPEN_ELSEWHERE": "이미 다른 탭에서 열려 있습니다. 그 탭에서 계속하거나, 그 탭을 닫고 다시 열어 주세요.",
+    "PROJECT_LOCKED": "잠긴 프로젝트입니다. 목록에서 선택한 뒤 비밀번호를 입력해 주세요.",
     "PROJECT_FILE_NOT_ZIP": "이 파일은 프로젝트 파일이 아닙니다.",
     "PROJECT_FILE_ENTRY_MISSING": "프로젝트 파일에 필요한 내용이 들어 있지 않습니다. ({entry})",
     "PROJECT_FILE_INVALID": "프로젝트 파일의 내용을 읽을 수 없습니다. ({path})",

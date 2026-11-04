@@ -30,6 +30,9 @@ vi.mock('../src/project/storage', () => ({
   loadProject: (id: string) => loadProject(id) as Promise<unknown>,
   markExported: vi.fn(),
   readExportedAt: vi.fn(async () => null),
+  // 잠긴 프로젝트는 `project-password.spec.ts`가 본다. 여기 검사들은 탭 잠금이
+  // 주제이므로 비밀번호는 안 걸린 것으로 둔다.
+  readLock: vi.fn(async () => null),
   requestPersistence: vi.fn(async () => false),
   saveProject: vi.fn(),
 }))

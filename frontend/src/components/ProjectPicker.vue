@@ -187,8 +187,22 @@ function lockReason(summary: ProjectSummary): string | null {
             :title="lockReason(summary) ?? undefined"
             @click="emit('open', summary.projectId)"
           >
-            <span class="block truncate font-bold">
-              {{ summary.readable ? summary.name : t('projects.unreadable') }}
+            <span class="flex min-w-0 items-center gap-1.5">
+              <!--
+                **누를 수 있는 줄이다.** 위의 `locked()`와 다른 뜻이라 그 함수를 안
+                지난다 — 저쪽은 "못 누른다"이고 이쪽은 눌러야 비밀번호를 묻는다.
+                그림 옆에 읽을 글이 함께 선다 (architecture.md §8.18).
+              -->
+              <component
+                :is="ACTION_ICONS.passwordLocked"
+                v-if="summary.locked"
+                :size="16"
+                class="shrink-0 text-ink-faint"
+                :aria-label="t('projects.lockedLabel')"
+              />
+              <span class="block truncate font-bold">
+                {{ summary.readable ? summary.name : t('projects.unreadable') }}
+              </span>
             </span>
             <span class="mt-1 block text-ink-faint">
               {{ format.dateTime(summary.updatedAt) }}

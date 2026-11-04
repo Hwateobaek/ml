@@ -34,9 +34,18 @@ import { newProjectDocument, newProjectSeed } from '@/project/create'
 import type { DataType } from '@/project/schema'
 import { readFileBytes } from '@/project/download'
 import { MLPX_EXTENSION, readProject } from '@/project/format'
-import { deleteProject, listProjects, saveProject, type ProjectSummary } from '@/project/storage'
+import { makeLock } from '@/project/lock'
+import {
+  deleteProject,
+  listProjects,
+  readLock,
+  saveProject,
+  writeLock,
+  type ProjectSummary,
+} from '@/project/storage'
 import { claimTabLock, withTabLock } from '@/project/tab-lock'
 import { useWork } from '@/composables/useWork'
+import { useProjectStore } from '@/stores/project'
 import { useToastStore } from '@/stores/toasts'
 
 const { t, locale } = useI18n()
@@ -71,6 +80,22 @@ const { busy, start } = useWork()
 const creating = ref(false)
 const name = ref('')
 const dataType = ref<DataType>(DEFAULT_DATA_TYPE)
+
+/**
+ * 잠금에 쓰는 칸들. **만들기 창과 잠금 해제 창이 `password`를 함께 쓴다** — 두 창이
+ * 동시에 열리지 않고, 둘 다 열 때 비운다.
+ *
+ * **힌트를 받는 이유는 비밀번호를 저장하지 않기 때문이다.** 잊으면 그 프로젝트는
+ * 영영 안 열린다 (open-decisions.md "프로젝트에 잠금을 걸 수 있다").
+ */
+const password = ref('')
+const hint = ref('')
+/** 지금 비밀번호를 묻고 있는 프로젝트. `null`이면 창이 닫혀 있다. */
+const unlocking = ref<ProjectSummary | null>(null)
+/** 직전 시도가 틀렸는가. 창을 닫지 않고 그 자리에서 알린다. */
+const wrongPassword = ref(false)
+
+const project = useProjectStore()
 
 /**
  * 종류를 묻는가. **선택지가 하나면 묻지 않는다**
@@ -137,11 +162,50 @@ function openCreate(): void {
   name.value = ''
   // 지난번에 고른 것이 남아 있으면 학생이 안 본 채로 만들어진다. 매번 처음으로 돌린다.
   dataType.value = DEFAULT_DATA_TYPE
+  // **비밀번호도 되돌린다.** 남아 있으면 다음 프로젝트가 학생도 모르게 잠긴다.
+  password.value = ''
+  hint.value = ''
   creating.value = true
 }
 
 function openProject(projectId: string): void {
   void router.push({ name: ROUTE_PROJECT_HOME, params: { projectId } })
+}
+
+/**
+ * 프로젝트를 연다. **잠겨 있으면 먼저 묻는다.**
+ *
+ * 묻는 자리가 여기인 것은 목록이 비밀번호를 모르기 때문이다 — 목록은 `locked`만
+ * 알고, 맞는지는 스토어가 판정한다.
+ */
+function pick(projectId: string): void {
+  const target = summaries.value.find((one) => one.projectId === projectId)
+  if (target?.locked !== true) {
+    openProject(projectId)
+    return
+  }
+  unlocking.value = target
+  password.value = ''
+  wrongPassword.value = false
+}
+
+/** 잠금 화면에서 [열기]. 틀리면 창을 닫지 않고 그 자리에서 알린다. */
+async function submitUnlock(): Promise<void> {
+  const target = unlocking.value
+  if (target === null || password.value === '') return
+  const lock = await readLock(target.projectId)
+  // 그 사이 잠금이 풀렸으면 그냥 연다 - 다른 탭에서 풀었을 수 있다.
+  if (lock === null) {
+    unlocking.value = null
+    openProject(target.projectId)
+    return
+  }
+  if (!project.unlock(target.projectId, password.value, lock)) {
+    wrongPassword.value = true
+    return
+  }
+  unlocking.value = null
+  openProject(target.projectId)
 }
 
 async function create(): Promise<void> {
@@ -162,6 +226,15 @@ async function create(): Promise<void> {
       attachments: new Map(),
       embeddings: new Map(),
     })
+    // **저장한 뒤에 건다.** 레코드가 있어야 `writeLock`이 붙일 자리가 있다
+    // (없는 프로젝트는 되살리지 않는다). 비밀번호를 안 적었으면 `makeLock`이
+    // null을 주고 잠금은 안 걸린다 - 지금과 똑같이 열린다.
+    const lock = makeLock(password.value, hint.value)
+    if (lock !== null) {
+      await writeLock(document.manifest.projectId, lock)
+      // 방금 만든 사람은 그 비밀번호를 아는 사람이다. 바로 묻지 않는다.
+      project.unlock(document.manifest.projectId, password.value, lock)
+    }
     creating.value = false
     openProject(document.manifest.projectId)
   } catch (error) {
@@ -301,7 +374,7 @@ onMounted(refresh)
           ref="picker"
           :summaries="summaries"
           :disabled="busy"
-          @open="openProject"
+          @open="pick"
           @remove="removing = $event"
           @remove-many="removingMany = $event"
         />
@@ -371,6 +444,41 @@ onMounted(refresh)
             :selected="dataType"
             @pick="pickDataType"
           />
+
+          <!--
+            **선택이다.** 비워 두면 지금과 똑같이 아무나 연다. 종류 다음에 두는 것은
+            이것이 프로젝트가 무엇인지와 무관한, 맨 마지막 질문이기 때문이다.
+          -->
+          <AppField :label="t('projects.password')" :hint="t('projects.passwordHint')">
+            <template #default="field">
+              <input
+                v-bind="field"
+                v-model="password"
+                type="password"
+                autocomplete="new-password"
+                class="w-full rounded-field border border-line-strong bg-surface px-3 py-2.5"
+              />
+            </template>
+          </AppField>
+
+          <!--
+            **비밀번호를 적었을 때만 묻는다.** 안 잠그는 사람에게 힌트 칸은 소음이다.
+          -->
+          <AppField
+            v-if="password !== ''"
+            :label="t('projects.passwordMemo')"
+            :hint="t('projects.passwordMemoHint')"
+          >
+            <template #default="field">
+              <input
+                v-bind="field"
+                v-model="hint"
+                type="text"
+                :maxlength="MAX_FILE_NAME_LENGTH"
+                class="w-full rounded-field border border-line-strong bg-surface px-3 py-2.5"
+              />
+            </template>
+          </AppField>
         </form>
 
         <template #actions>
@@ -378,6 +486,46 @@ onMounted(refresh)
             t('common.cancel')
           }}</AppButton>
           <AppButton :disabled="!canCreate" :action="create">{{ t('projects.create') }}</AppButton>
+        </template>
+      </AppDialog>
+
+      <AppDialog
+        :open="unlocking !== null"
+        :title="t('projects.unlockTitle')"
+        :description="t('projects.unlockDescription', { name: unlocking?.name ?? '' })"
+        @close="unlocking = null"
+      >
+        <form class="flex flex-col gap-6" @submit.prevent="submitUnlock">
+          <AppField
+            :label="t('projects.password')"
+            :hint="
+              unlocking?.hint === undefined
+                ? undefined
+                : t('projects.passwordMemoShown', { hint: unlocking.hint })
+            "
+            :error="wrongPassword ? t('projects.passwordWrong') : undefined"
+          >
+            <template #default="field">
+              <input
+                v-bind="field"
+                v-model="password"
+                type="password"
+                autocomplete="current-password"
+                autofocus
+                class="w-full rounded-field border border-line-strong bg-surface px-3 py-2.5"
+                @input="wrongPassword = false"
+              />
+            </template>
+          </AppField>
+        </form>
+
+        <template #actions>
+          <AppButton variant="secondary" @click="unlocking = null">{{
+            t('common.cancel')
+          }}</AppButton>
+          <AppButton :disabled="password === ''" :action="submitUnlock">{{
+            t('projects.unlock')
+          }}</AppButton>
         </template>
       </AppDialog>
 

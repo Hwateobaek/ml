@@ -100,6 +100,10 @@ export const CLIENT_ERROR_CODES = [
   // 잊힌 탭의 저장이 이쪽 실험을 흔적 없이 덮기 때문이다
   // (open-decisions.md "프로젝트는 한 번에 하나만 연다").
   'PROJECT_OPEN_ELSEWHERE',
+  // 잠긴 프로젝트에 비밀번호 없이 닿았다. 주소를 직접 치거나 새로 고친 경우다 -
+  // 목록으로 돌려보내고 거기서 묻는다 (open-decisions.md "프로젝트에 잠금을 걸 수
+  // 있다 — 파일에는 안 들어간다").
+  'PROJECT_LOCKED',
 
   // 프로젝트 파일 열기 - project/format.ts, project/migrate.ts
   'PROJECT_FILE_NOT_ZIP',

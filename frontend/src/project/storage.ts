@@ -23,6 +23,7 @@ import {
   pointsToFile,
   type ProjectFile,
 } from './format'
+import { isLock, type ProjectLock } from './lock'
 import { migrateProjectDocument } from './migrate'
 import { TASK_TYPES, type ProjectDocument, type TaskType } from './schema'
 
@@ -53,6 +54,15 @@ interface ProjectRecord {
    * "아직 안 내보냈다"를 상태 표시줄에 상시 띄우는 것이 그 문제에 주는 답이다.
    */
   exportedAt?: string
+  /**
+   * 이 기기에서 이 프로젝트를 열 때 비밀번호를 묻는가. 없으면 안 묻는다.
+   *
+   * **`.mlpx` 안에는 적지 않는다.** `exportedAt`과 같은 자리이고 같은 이유다 — 그건
+   * 이 기기의 사정이지 파일의 내용이 아니다. 그래서 파일로 받은 프로젝트는 비밀번호
+   * 없이 열리고, 교사는 제출물을 그대로 연다 (CLAUDE.md §1.3,
+   * open-decisions.md "프로젝트에 잠금을 걸 수 있다 — 파일에는 안 들어간다").
+   */
+  lock?: ProjectLock
 }
 
 interface DatasetRecord {
@@ -139,6 +149,15 @@ export interface ProjectSummary {
    * 프로젝트가 사라진 것으로 보인다. 지우기는 열어 둔다.
    */
   readable: boolean
+  /**
+   * 열 때 비밀번호를 묻는가. 화면이 자물쇠를 그리고 잠금 대화상자를 띄운다.
+   *
+   * **잠겨 있어도 목록에는 남는다.** `readable`이 `false`인 것과 같은 규칙이다
+   * (architecture.md §8.10.2) — 빼면 학생 눈에는 프로젝트가 사라진 것으로 보인다.
+   */
+  locked: boolean
+  /** 학생이 적어 둔 단서. 안 적었으면 없다. 잠금 화면에 보인다. */
+  hint?: string
 }
 
 let connection: Promise<IDBPDatabase<PlaygroundDB>> | null = null
@@ -371,6 +390,9 @@ export async function saveProject(project: ProjectFile): Promise<void> {
       updatedAt: project.document.manifest.updatedAt,
       sizeBytes: size,
       ...(before?.exportedAt === undefined ? {} : { exportedAt: before.exportedAt }),
+      // 잠금도 저장이 지우면 안 된다. **이걸 빠뜨리면 학생이 건 잠금이 자동 저장
+      // 한 번에 조용히 사라진다** - 화면에는 아무것도 안 뜨므로 아무도 못 알아챈다.
+      ...(before?.lock === undefined ? {} : { lock: before.lock }),
     })
     const datasets = transaction.objectStore(DATASETS_STORE)
     // 테스트·예측 데이터가 함께 실린다. 없으면 그 키를 아예 안 넣는다 - undefined를
@@ -547,8 +569,42 @@ export async function listProjects(): Promise<ProjectSummary[]> {
       updatedAt: record.updatedAt,
       sizeBytes: record.sizeBytes,
       readable,
+      // **모양이 아니면 잠기지 않은 것으로 친다** (`project/lock.ts`의 `isLock`).
+      // 손상된 잠금으로 문을 닫으면 맞는 비밀번호를 넣고도 못 들어간다.
+      locked: isLock(record.lock),
+      ...(isLock(record.lock) && record.lock.hint !== undefined ? { hint: record.lock.hint } : {}),
     }
   })
+}
+
+/**
+ * 잠금을 읽는다. **열기 판정이 이걸 쓴다** (`stores/project.ts`).
+ *
+ * 없거나 모양이 아니면 `null`이고, 그때는 안 묻고 연다.
+ */
+export async function readLock(projectId: string): Promise<ProjectLock | null> {
+  const record = await (await db()).get(PROJECTS_STORE, projectId)
+  return isLock(record?.lock) ? record.lock : null
+}
+
+/**
+ * 잠금을 걸거나 푼다. `null`이면 푼다.
+ *
+ * 없는 프로젝트에는 아무것도 하지 않는다 — 지워진 프로젝트를 되살리면 안 된다
+ * (`markExported`와 같은 규칙).
+ */
+export async function writeLock(projectId: string, lock: ProjectLock | null): Promise<void> {
+  const database = await db()
+  const transaction = database.transaction(PROJECTS_STORE, 'readwrite')
+  const record = await transaction.store.get(projectId)
+  if (record) {
+    // **푸는 것은 키를 빼는 것이다.** `lock: undefined`를 넣어 두면 "안 잠김"과
+    // "값이 undefined"가 레코드 안에서 섞인다 (`exportedAt`과 같은 규칙).
+    const next = { ...record }
+    delete next.lock
+    await transaction.store.put(lock === null ? next : { ...next, lock })
+  }
+  await transaction.done
 }
 
 /**

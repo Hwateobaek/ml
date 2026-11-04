@@ -22,10 +22,12 @@ import {
 import { dataFactsOf } from '@/project/facts'
 import { isPortfolioAnswered } from '@/project/portfolio'
 import { type DataType, type TaskType } from '@/project/schema'
+import { checkLock } from '@/project/lock'
 import {
   loadProject,
   markExported,
   readExportedAt,
+  readLock,
   requestPersistence,
   saveProject,
 } from '@/project/storage'
@@ -120,12 +122,42 @@ export const useProjectStore = defineStore('project', () => {
    * 라우터 가드가 화면 전환마다 부르므로, 같은 프로젝트 안에서 단계를 옮길 때
    * 매번 IndexedDB를 다시 읽으면 안 된다.
    */
+  /**
+   * 이 탭에서 비밀번호를 통과한 프로젝트.
+   *
+   * **메모리에만 둔다.** 저장해 두면 새로 고쳐도 안 묻게 되고, 그건 잠금이 아니라
+   * 잠금처럼 보이는 것이다 (open-decisions.md "프로젝트에 잠금을 걸 수 있다").
+   */
+  const unlocked = new Set<string>()
+
+  /**
+   * 비밀번호를 확인하고, 맞으면 이 탭에서 열 수 있게 표시한다.
+   *
+   * **여는 것은 여기서 안 한다** — 부르는 쪽이 통과한 뒤에 평소처럼 이동한다.
+   * 잠금 확인과 열기를 한 함수에 묶으면 "확인만 하고 싶다"가 불가능해진다.
+   */
+  function unlock(id: string, password: string, lock: Parameters<typeof checkLock>[0]): boolean {
+    if (!checkLock(lock, password)) return false
+    unlocked.add(id)
+    return true
+  }
+
   async function open(id: string): Promise<boolean> {
     if (projectId.value === id) {
       return true
     }
     opening.value = true
     try {
+      // **잠금은 여기서 본다.** 프로젝트는 주소로 열리므로(`/project/:projectId`)
+      // 목록의 클릭 처리기에만 걸면 주소를 치거나 F5를 누르는 것으로 뚫린다.
+      // 모든 경로가 지나는 자리가 여기다 (router/index.ts의 beforeEach).
+      //
+      // **파일로 연 프로젝트는 걸리지 않는다** - 잠금은 레코드에만 있고 `.mlpx`에는
+      // 없으므로, 교사가 받은 제출물에는 이 줄이 아무 일도 하지 않는다.
+      if (!unlocked.has(id) && (await readLock(id)) !== null) {
+        useToastStore().pushError(new ClientError('PROJECT_LOCKED'))
+        return false
+      }
       // **다른 탭이 쥔 프로젝트는 열지 않는다** (open-decisions.md "프로젝트는 한 번에
       // 하나만 연다"). 반쯤 열면 자동 저장이 따라 들어와, 잊힌 탭의 저장이 이쪽 실험을
       // 흔적 없이 덮는 바로 그 사고를 다시 부른다. 알리고 목록으로 돌려보낸다.
@@ -346,6 +378,7 @@ export const useProjectStore = defineStore('project', () => {
     taskType,
     dataType,
     open,
+    unlock,
     save,
     update,
     flush,
