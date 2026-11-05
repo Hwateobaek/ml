@@ -394,12 +394,22 @@ describe('프런트엔드 전용 코드', () => {
     '답을 낸',
   ]
 
+  /**
+   * **어긋난 것을 모아 한 번만 단정한다** (2026-11-05). 짝마다 `expect`를 부르면
+   * 문구 942개 × 낱말 73개 = **6만 8천 번**이 되고, 그 호출 비용만으로 5초 제한에
+   * 닿는다 - 느린 기기에서 6.2초·10.5초로 넘쳐 **고친 것이 없는데도 관문이 빨개졌다.**
+   *
+   * **잡는 범위는 그대로다.** 어긋난 것을 하나도 빠뜨리지 않고, 실패하면 오히려
+   * 전부를 한 번에 보여 준다 - 예전에는 첫 번째에서 멈췄다.
+   */
   it('동작의 이름에 순우리말을 쓰지 않는다', () => {
+    const found: string[] = []
     for (const [key, value] of korean) {
       for (const word of RETIRED) {
-        expect(value, `${key} uses '${word}'`).not.toContain(word)
+        if (value.includes(word)) found.push(`${key} uses '${word}'`)
       }
     }
+    expect(found).toEqual([])
   })
 
   /**

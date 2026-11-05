@@ -479,19 +479,33 @@ describe('사다리와 워커의 계약', () => {
 
   /**
    * **둘이 같은 것을 재면 갈래를 나눈 뜻이 없다.** 전부 한 번에 잰 것은 일감 **전부**를
-   * 지나가므로 일감 하나보다 반드시 길다.
+   * 지나가야 한다 - 하나만 지나가면 위 갈래와 같은 것을 재는 셈이다.
+   *
+   * **`all > one` 으로 재지 않는다** (2026-11-05). 그 단정은 참이 아니다 - 바로 위
+   * `measureCalibrationSet`의 주석이 그 이유를 적어 두었다. 일감 하나를 재는 쪽은
+   * **일감마다 새 워커**라 차가운 시작을 무는데, 전부 한 번에 재는 쪽은 **한 워커에서
+   * 이어 돌아 두 번째부터 따뜻하다.** 그래서 차가운 하나가 따뜻한 전부보다 길 수 있고,
+   * 실제로 CI에서 **126 대 128**로 뒤집혀 배포가 막혔다.
+   *
+   * **대신 판별력으로 잰다.** 전부 지나갔으면 잰 값은 일감들의 합에 가깝고, 하나만
+   * 지나갔으면 그 절반 아래(= 일감 하나)로 떨어진다. 일감이 둘 이상이므로 두 경우의
+   * 간격은 배수이고, 몇 ms의 흔들림으로는 넘나들 수 없다.
    */
-  it('전부 한 번에 잰 것이 일감 하나보다 길다', async () => {
-    const job = CALIBRATION[0]
-    expect(job).toBeDefined()
+  it('전부 한 번에 잰 것이 일감 전부를 지나간다', async () => {
     expect(CALIBRATION.length).toBeGreaterThanOrEqual(2)
-    const one = await benchOutcome({
-      kind: 'calibration',
-      job: job as (typeof CALIBRATION)[number],
-    })
+
+    let sumOfJobs = 0
+    for (const job of CALIBRATION) {
+      const one = await benchOutcome({ kind: 'calibration', job })
+      expect(one.ok).toBe(true)
+      if (one.ok) sumOfJobs += one.elapsed
+    }
+    expect(sumOfJobs).toBeGreaterThan(0)
+
     const all = await benchOutcome({ kind: 'calibration-set' })
-    expect(one.ok && all.ok).toBe(true)
-    if (one.ok && all.ok) expect(all.elapsed).toBeGreaterThan(one.elapsed)
+    expect(all.ok).toBe(true)
+    // 합의 절반이 곧 "일감 하나만 쟀다"의 윗선이다 (일감이 둘일 때가 가장 빡빡하다).
+    if (all.ok) expect(all.elapsed).toBeGreaterThan(sumOfJobs / 2)
   })
 
   /**
