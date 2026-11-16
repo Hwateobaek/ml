@@ -33,6 +33,7 @@ import {
   REQUIRED,
   SUPPLIED,
   SUPPLIED_DIR,
+  assertRequiredPackages,
   packageFromId,
   readShipped,
   renderNotices,
@@ -167,6 +168,23 @@ describe('허용 목록', () => {
   it('저장소가 손으로 붙든 패키지들도 목록 안이다', () => {
     const names = [...Object.keys(SUPPLIED), ...Object.keys(BUNDLED_INSIDE)]
     expect(unallowed(names.map(readShipped)).map((shipped) => shipped.name)).toEqual([])
+  })
+})
+
+describe('산출물 수집의 필수 경로', () => {
+  const shipped = ['@vue/runtime-dom', 'pretendard', '@tensorflow/tfjs-core', 'seedrandom']
+
+  it('재수출 진입점이 제거되어도 실제 Vue 런타임이 있으면 통과한다', () => {
+    expect(() => assertRequiredPackages(new Set(shipped))).not.toThrow()
+  })
+
+  it.each(shipped)('%s 수집이 빠지면 멈춘다 — vue 이름만으로 대체할 수 없다', (missing) => {
+    const seen = new Set([...shipped.filter((name) => name !== missing), 'vue'])
+    expect(() => assertRequiredPackages(seen)).toThrow(`always ship: ${missing}.`)
+  })
+
+  it('빈 수집 결과는 통과하지 않는다', () => {
+    expect(() => assertRequiredPackages(new Set())).toThrow('missing packages')
   })
 })
 

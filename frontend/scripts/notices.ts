@@ -340,15 +340,32 @@ export interface Notices {
  *
  * **개수 문턱이 아니라 이름 목록인 이유**는 그때 49개가 41개가 됐기 때문이다 — 어지간한
  * 문턱은 그냥 지나간다. 아래 넷은 **서로 다른 수집 경로**를 하나씩 대표한다:
- * 본 빌드(`vue`), **워커 빌드만 거치는 것**(`@tensorflow/tfjs-core`·`seedrandom`),
+ * 본 빌드(`@vue/runtime-dom`), **워커 빌드만 거치는 것**(`@tensorflow/tfjs-core`·`seedrandom`),
  * 그리고 전문을 `SUPPLIED`가 채우는 자산(`pretendard`).
  */
 export const REQUIRED: readonly string[] = [
-  'vue',
+  '@vue/runtime-dom',
   'pretendard',
   '@tensorflow/tfjs-core',
   'seedrandom',
 ]
+
+/**
+ * 재수출 진입점 `vue`는 트리 셰이킹으로 사라질 수 있으므로 실제 DOM 런타임을 요구한다.
+ * tests/notices.spec.ts가 진입점 없는 산출물과 각 수집 경로의 누락을 구분한다.
+ * `vue` 자체가 산출물에 남는 경우에는 기존 수집기가 그대로 고지에 넣는다.
+ */
+export function assertRequiredPackages(seen: ReadonlySet<string>): void {
+  const absent = REQUIRED.filter((name) => !seen.has(name))
+  if (absent.length > 0) {
+    throw new Error(
+      `Third-party notices are missing packages that always ship: ${absent.join(', ')}. ` +
+        `The collector saw ${String(seen.size)} package(s). Check the main bundle, ` +
+        `worker.plugins wiring to notices.collect, and asset originalFileNames. ` +
+        `If a dependency genuinely went away, update REQUIRED (frontend/scripts/notices.ts).`,
+    )
+  }
+}
 
 export function thirdPartyNotices(): Notices {
   const seen = new Set<string>()
@@ -365,18 +382,7 @@ export function thirdPartyNotices(): Notices {
       generateBundle(_options, bundle) {
         for (const name of namesIn(bundle)) seen.add(name)
         // **바닥이 먼저다.** 아래 두 방어선은 본 것만 검사하므로, 못 봤을 때는 둘 다 침묵한다.
-        const absent = REQUIRED.filter((name) => !seen.has(name))
-        if (absent.length > 0) {
-          throw new Error(
-            `Third-party notices are missing packages that always ship: ${absent.join(', ')}. ` +
-              `The collector saw ${String(seen.size)} package(s), which means it is not reading ` +
-              `the module graph it should — an empty or short list makes this file silently wrong ` +
-              `while the build still succeeds. Check that vite.config.ts still wires ` +
-              `worker.plugins to notices.collect: removing that one line drops every package that ` +
-              `only the worker imports (TensorFlow.js and seedrandom). ` +
-              `If a dependency genuinely went away, update REQUIRED (frontend/scripts/notices.ts).`,
-          )
-        }
+        assertRequiredPackages(seen)
         const shipped = [...seen].map(readShipped)
         const rejected = unallowed(shipped)
         if (rejected.length > 0) {
